@@ -217,4 +217,50 @@ class ExerciseProvider extends ChangeNotifier {
     await _storage.deleteWeightEntry(id);
     notifyListeners();
   }
+
+  // --- History ---
+  Future<void> addHistoryEntries(
+    String exerciseId,
+    List<ExerciseHistoryEntry> newEntries,
+  ) async {
+    final index = _exercises.indexWhere((e) => e.id == exerciseId);
+    if (index >= 0) {
+      final updatedHistory = List<ExerciseHistoryEntry>.from(
+        _exercises[index].history,
+      )..addAll(newEntries);
+
+      final updatedExercise = _exercises[index].copyWith(
+        history: updatedHistory,
+      );
+      _exercises[index] = updatedExercise;
+      await _storage.saveExercise(updatedExercise);
+      _applyFilters();
+      notifyListeners();
+    }
+  }
+
+  Future<void> updateHistory(
+    String exerciseId,
+    String sessionId,
+    List<ExerciseHistoryEntry> sessionEntries,
+  ) async {
+    final index = _exercises.indexWhere((e) => e.id == exerciseId);
+    if (index >= 0) {
+      final currentHistory = List<ExerciseHistoryEntry>.from(
+        _exercises[index].history,
+      );
+      // Remove old entries for this session
+      currentHistory.removeWhere((entry) => entry.sessionId == sessionId);
+      // Add new ones
+      currentHistory.addAll(sessionEntries);
+
+      final updatedExercise = _exercises[index].copyWith(
+        history: currentHistory,
+      );
+      _exercises[index] = updatedExercise;
+      await _storage.saveExercise(updatedExercise);
+      _applyFilters();
+      notifyListeners();
+    }
+  }
 }

@@ -18,11 +18,13 @@ extension HiveRegistrar on HiveInterface {
     registerAdapter(BodyMetricsAdapter());
     registerAdapter(DayLogAdapter());
     registerAdapter(ExerciseAdapter());
+    registerAdapter(ExerciseHistoryEntryAdapter());
     registerAdapter(RunLogAdapter());
     registerAdapter(UserProfileAdapter());
     registerAdapter(WeightEntryAdapter());
     registerAdapter(WorkoutRoutineAdapter());
     registerAdapter(WorkoutSessionAdapter());
+    registerAdapter(WorkoutSetAdapter());
   }
 }
 
@@ -32,10 +34,12 @@ extension IsolatedHiveRegistrar on IsolatedHiveInterface {
     registerAdapter(BodyMetricsAdapter());
     registerAdapter(DayLogAdapter());
     registerAdapter(ExerciseAdapter());
+    registerAdapter(ExerciseHistoryEntryAdapter());
     registerAdapter(RunLogAdapter());
     registerAdapter(UserProfileAdapter());
     registerAdapter(WeightEntryAdapter());
     registerAdapter(WorkoutRoutineAdapter());
     registerAdapter(WorkoutSessionAdapter());
+    registerAdapter(WorkoutSetAdapter());
   }
 }

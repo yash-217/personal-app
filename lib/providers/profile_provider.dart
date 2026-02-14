@@ -42,15 +42,28 @@ class ProfileProvider extends ChangeNotifier {
     double? weight,
     String? gender,
     int? weeklyGoal,
+    String? weightUnit,
+    DateTime? birthDate,
   }) async {
-    if (_profile == null) return;
-    final updated = _profile!.copyWith(
+    final current =
+        _profile ??
+        UserProfile(
+          name: '',
+          age: 0,
+          height: 0,
+          weight: 0,
+          gender: '',
+          weightUnit: weightUnit ?? 'kg',
+        );
+    final updated = current.copyWith(
       name: name,
       age: age,
       height: height,
       weight: weight,
       gender: gender,
       weeklyGoal: weeklyGoal,
+      weightUnit: weightUnit,
+      birthDate: birthDate,
     );
     await saveProfile(updated);
   }
@@ -93,6 +106,12 @@ class ProfileProvider extends ChangeNotifier {
       await updateProfile(weight: weight);
     }
 
+    notifyListeners();
+  }
+
+  Future<void> deleteBodyMetrics(String id) async {
+    await _storage.deleteBodyMetrics(id);
+    _bodyMetrics = _storage.getAllBodyMetrics();
     notifyListeners();
   }
 }

@@ -125,7 +125,7 @@ class _RunImportScreenState extends State<RunImportScreen> {
             OutlinedButton.icon(
               onPressed: _pickImage,
               icon: const Icon(Icons.image),
-              label: const Text('Import from Strava Screenshot'),
+              label: const Text('Import from screenshot'),
               style: OutlinedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 16),
               ),

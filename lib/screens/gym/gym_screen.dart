@@ -7,6 +7,7 @@ import '../../core/theme/app_colors.dart';
 import 'routine_creator_screen.dart';
 import '../workout/workout_session_screen.dart';
 import '../exercises/exercise_library_screen.dart';
+import '../../widgets/confirm_dialog.dart';
 
 class GymScreen extends StatelessWidget {
   const GymScreen({super.key});
@@ -284,11 +285,19 @@ class GymScreen extends StatelessWidget {
                           child: Text('Delete'),
                         ),
                       ],
-                      onSelected: (val) {
+                      onSelected: (val) async {
                         if (val == 'delete') {
-                          context.read<WorkoutProvider>().deleteRoutine(
-                            routine.id,
+                          final confirm = await ConfirmDialog.show(
+                            context,
+                            title: 'Delete Routine',
+                            message:
+                                'Are you sure you want to delete "${routine.name}"?',
                           );
+                          if (confirm && context.mounted) {
+                            context.read<WorkoutProvider>().deleteRoutine(
+                              routine.id,
+                            );
+                          }
                         }
                       },
                     ),

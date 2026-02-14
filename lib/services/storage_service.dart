@@ -42,6 +42,8 @@ class StorageService {
     Hive.registerAdapter(UserProfileAdapter());
     Hive.registerAdapter(BodyMetricsAdapter());
     Hive.registerAdapter(WorkoutRoutineAdapter());
+    Hive.registerAdapter(WorkoutSetAdapter());
+    Hive.registerAdapter(ExerciseHistoryEntryAdapter());
 
     // Open boxes
     exercisesBox = await Hive.openBox<Exercise>(_exercisesBox);
@@ -63,6 +65,10 @@ class StorageService {
     for (final ex in exercises) {
       await exercisesBox.put(ex.id, ex);
     }
+  }
+
+  Future<void> saveExercise(Exercise ex) async {
+    await exercisesBox.put(ex.id, ex);
   }
 
   bool get hasExercisesCache => exercisesBox.isNotEmpty;
@@ -149,6 +155,10 @@ class StorageService {
 
   Future<void> saveBodyMetrics(BodyMetrics metrics) async {
     await bodyMetricsBox.put(metrics.id, metrics);
+  }
+
+  Future<void> deleteBodyMetrics(String id) async {
+    await bodyMetricsBox.delete(id);
   }
 
   // --- Settings ---

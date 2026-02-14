@@ -9,6 +9,7 @@ import '../../models/body_metrics.dart';
 import '../../providers/profile_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../services/inbody_ocr_service.dart';
+import '../../widgets/confirm_dialog.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -88,7 +89,9 @@ class ProfileScreen extends StatelessWidget {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              '${profile.age}y · ${profile.height.toStringAsFixed(0)}cm · ${profile.weight.toStringAsFixed(1)}kg',
+                              profile.weightUnit == 'lbs'
+                                  ? '${profile.calculatedAge}y · ${profile.height.toStringAsFixed(0)}cm · ${(profile.weight * 2.20462).toStringAsFixed(1)}lbs (${profile.weight.toStringAsFixed(1)}kg)'
+                                  : '${profile.calculatedAge}y · ${profile.height.toStringAsFixed(0)}cm · ${profile.weight.toStringAsFixed(1)}kg (${(profile.weight * 2.20462).toStringAsFixed(1)}lbs)',
                               style: theme.textTheme.bodyMedium,
                             ),
                             Text(
@@ -473,6 +476,23 @@ class ProfileScreen extends StatelessWidget {
                               ),
                             ),
                           ),
+                        const Spacer(),
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline, size: 20),
+                          onPressed: () async {
+                            final confirm = await ConfirmDialog.show(
+                              context,
+                              title: 'Delete Measurement',
+                              message:
+                                  'Are you sure you want to delete this record?',
+                            );
+                            if (confirm && context.mounted) {
+                              context.read<ProfileProvider>().deleteBodyMetrics(
+                                item.id,
+                              );
+                            }
+                          },
+                        ),
                       ],
                     ),
                     const SizedBox(height: 12),
@@ -711,7 +731,6 @@ class ProfileScreen extends StatelessWidget {
 
   void _showEditProfileDialog(BuildContext context, UserProfile? existing) {
     final nameCtrl = TextEditingController(text: existing?.name ?? '');
-    final ageCtrl = TextEditingController(text: existing?.age.toString() ?? '');
     final heightCtrl = TextEditingController(
       text: existing?.height.toStringAsFixed(0) ?? '',
     );
@@ -721,105 +740,172 @@ class ProfileScreen extends StatelessWidget {
     final goalCtrl = TextEditingController(
       text: (existing?.weeklyGoal ?? 4).toString(),
     );
+    String unit = existing?.weightUnit ?? 'kg';
+    DateTime? selectedBirthDate = existing?.birthDate;
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       builder: (ctx) {
-        return Padding(
-          padding: EdgeInsets.fromLTRB(
-            24,
-            24,
-            24,
-            MediaQuery.of(ctx).viewInsets.bottom + 24,
-          ),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  existing == null ? 'Create Profile' : 'Edit Profile',
-                  style: Theme.of(ctx).textTheme.titleLarge,
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: nameCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Name',
-                    prefixIcon: Icon(Icons.person),
-                  ),
-                  autofocus: true,
-                ),
-                const SizedBox(height: 12),
-                Row(
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Padding(
+              padding: EdgeInsets.fromLTRB(
+                24,
+                24,
+                24,
+                MediaQuery.of(ctx).viewInsets.bottom + 24,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Expanded(
-                      child: TextField(
-                        controller: ageCtrl,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(labelText: 'Age'),
-                      ),
+                    Text(
+                      existing == null ? 'Create Profile' : 'Edit Profile',
+                      style: Theme.of(ctx).textTheme.titleLarge,
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: TextField(
-                        controller: heightCtrl,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: 'Height (cm)',
-                        ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: nameCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Name',
+                        prefixIcon: Icon(Icons.person),
                       ),
+                      autofocus: true,
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: InkWell(
+                            onTap: () async {
+                              final now = DateTime.now();
+                              final picked = await showDatePicker(
+                                context: ctx,
+                                initialDate:
+                                    selectedBirthDate ??
+                                    DateTime(now.year - 25, now.month, now.day),
+                                firstDate: DateTime(1900),
+                                lastDate: now,
+                                helpText: 'Select Date of Birth',
+                              );
+                              if (picked != null) {
+                                setModalState(() => selectedBirthDate = picked);
+                              }
+                            },
+                            child: InputDecorator(
+                              decoration: const InputDecoration(
+                                labelText: 'Date of Birth',
+                                prefixIcon: Icon(Icons.cake),
+                              ),
+                              child: Text(
+                                selectedBirthDate == null
+                                    ? 'Select Date'
+                                    : '${selectedBirthDate!.day}/${selectedBirthDate!.month}/${selectedBirthDate!.year}',
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextField(
+                            controller: heightCtrl,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              labelText: 'Height (cm)',
+                              prefixIcon: Icon(Icons.height),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: weightCtrl,
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            decoration: const InputDecoration(
+                              labelText: 'Weight (kg)',
+                              prefixIcon: Icon(Icons.monitor_weight_outlined),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextField(
+                            controller: goalCtrl,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              labelText: 'Weekly Goal',
+                              prefixIcon: Icon(Icons.calendar_today),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Preferred Weight Unit',
+                      style: Theme.of(ctx).textTheme.labelLarge,
+                    ),
+                    const SizedBox(height: 8),
+                    SegmentedButton<String>(
+                      segments: const [
+                        ButtonSegment(value: 'kg', label: Text('KG')),
+                        ButtonSegment(value: 'lbs', label: Text('LBS')),
+                      ],
+                      selected: {unit},
+                      onSelectionChanged: (newSelection) {
+                        setModalState(() => unit = newSelection.first);
+                      },
+                    ),
+                    const SizedBox(height: 24),
+                    FilledButton(
+                      onPressed: () {
+                        final name = nameCtrl.text.trim();
+                        if (name.isEmpty) return;
+
+                        // Always store weight in kg internally
+                        double weightKg =
+                            double.tryParse(weightCtrl.text) ?? 70;
+
+                        // Calculate age for legacy field
+                        int calculatedAge = existing?.age ?? 25;
+                        if (selectedBirthDate != null) {
+                          final now = DateTime.now();
+                          calculatedAge = now.year - selectedBirthDate!.year;
+                          if (now.month < selectedBirthDate!.month ||
+                              (now.month == selectedBirthDate!.month &&
+                                  now.day < selectedBirthDate!.day)) {
+                            calculatedAge--;
+                          }
+                        }
+
+                        final profile = UserProfile(
+                          name: name,
+                          age: calculatedAge,
+                          height: double.tryParse(heightCtrl.text) ?? 170,
+                          weight: weightKg,
+                          gender: 'male',
+                          weeklyGoal: int.tryParse(goalCtrl.text) ?? 4,
+                          weightUnit: unit,
+                          birthDate: selectedBirthDate,
+                        );
+                        context.read<ProfileProvider>().saveProfile(profile);
+                        Navigator.of(ctx).pop();
+                      },
+                      child: const Text('Save'),
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: weightCtrl,
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true,
-                        ),
-                        decoration: const InputDecoration(
-                          labelText: 'Weight (kg)',
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: TextField(
-                        controller: goalCtrl,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: 'Weekly Goal',
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                FilledButton(
-                  onPressed: () {
-                    final name = nameCtrl.text.trim();
-                    if (name.isEmpty) return;
-                    final profile = UserProfile(
-                      name: name,
-                      age: int.tryParse(ageCtrl.text) ?? 25,
-                      height: double.tryParse(heightCtrl.text) ?? 170,
-                      weight: double.tryParse(weightCtrl.text) ?? 70,
-                      gender: 'male',
-                      weeklyGoal: int.tryParse(goalCtrl.text) ?? 4,
-                    );
-                    context.read<ProfileProvider>().saveProfile(profile);
-                    Navigator.of(ctx).pop();
-                  },
-                  child: const Text('Save'),
-                ),
-              ],
-            ),
-          ),
+              ),
+            );
+          },
         );
       },
     );

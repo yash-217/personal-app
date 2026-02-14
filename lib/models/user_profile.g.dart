@@ -23,13 +23,15 @@ class UserProfileAdapter extends TypeAdapter<UserProfile> {
       weight: (fields[3] as num).toDouble(),
       gender: fields[4] as String,
       weeklyGoal: fields[5] == null ? 4 : (fields[5] as num).toInt(),
+      weightUnit: fields[6] == null ? 'kg' : fields[6] as String,
+      birthDate: fields[7] as DateTime?,
     );
   }
 
   @override
   void write(BinaryWriter writer, UserProfile obj) {
     writer
-      ..writeByte(6)
+      ..writeByte(8)
       ..writeByte(0)
       ..write(obj.name)
       ..writeByte(1)
@@ -41,7 +43,11 @@ class UserProfileAdapter extends TypeAdapter<UserProfile> {
       ..writeByte(4)
       ..write(obj.gender)
       ..writeByte(5)
-      ..write(obj.weeklyGoal);
+      ..write(obj.weeklyGoal)
+      ..writeByte(6)
+      ..write(obj.weightUnit)
+      ..writeByte(7)
+      ..write(obj.birthDate);
   }
 
   @override
