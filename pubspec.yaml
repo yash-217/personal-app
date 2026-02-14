@@ -1,0 +1,68 @@
+name: gym_tracker
+description: "FitPrint — your personal fitness tracker with exercise library, workout sessions, run tracking, and body metrics."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.10.7
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: any
+
+  # State management
+  provider: any
+
+  # Local storage (migrated to hive_ce for modern compatibility)
+  hive_ce: any
+  hive_ce_flutter: any
+
+  # Calendar
+  table_calendar: any
+
+  # Charts
+  fl_chart: any
+
+  # Typography
+  google_fonts: any
+
+  # Date formatting
+  intl: any
+
+  # Animations
+  flutter_animate: any
+
+  # Networking (ExerciseDB API)
+  http: any
+  cached_network_image: any
+
+  # Strava OCR import
+  receive_sharing_intent: any
+  google_mlkit_text_recognition: ^0.15.1
+  image_picker: any
+
+  # Utilities
+  uuid: any
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: any
+  flutter_launcher_icons: any
+  build_runner: any
+  hive_ce_generator: any
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/icons/
+    - assets/exercises_seed.json
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icon/app_icon.png"
+  adaptive_icon_background: "#0D47A1"
+  adaptive_icon_foreground: "assets/icon/app_icon.png"
