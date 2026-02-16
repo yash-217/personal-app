@@ -7,6 +7,7 @@ import 'package:gym_tracker/models/body_metrics.dart';
 import 'package:gym_tracker/models/day_log.dart';
 import 'package:gym_tracker/models/exercise.dart';
 import 'package:gym_tracker/models/run_log.dart';
+import 'package:gym_tracker/models/sleep_log.dart';
 import 'package:gym_tracker/models/user_profile.dart';
 import 'package:gym_tracker/models/weight_entry.dart';
 import 'package:gym_tracker/models/workout_routine.dart';
@@ -20,6 +21,7 @@ extension HiveRegistrar on HiveInterface {
     registerAdapter(ExerciseAdapter());
     registerAdapter(ExerciseHistoryEntryAdapter());
     registerAdapter(RunLogAdapter());
+    registerAdapter(SleepLogAdapter());
     registerAdapter(UserProfileAdapter());
     registerAdapter(WeightEntryAdapter());
     registerAdapter(WorkoutRoutineAdapter());
@@ -36,6 +38,7 @@ extension IsolatedHiveRegistrar on IsolatedHiveInterface {
     registerAdapter(ExerciseAdapter());
     registerAdapter(ExerciseHistoryEntryAdapter());
     registerAdapter(RunLogAdapter());
+    registerAdapter(SleepLogAdapter());
     registerAdapter(UserProfileAdapter());
     registerAdapter(WeightEntryAdapter());
     registerAdapter(WorkoutRoutineAdapter());

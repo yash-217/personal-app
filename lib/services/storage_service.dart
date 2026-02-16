@@ -7,6 +7,7 @@ import '../models/weight_entry.dart';
 import '../models/user_profile.dart';
 import '../models/body_metrics.dart';
 import '../models/workout_routine.dart';
+import '../models/sleep_log.dart';
 
 class StorageService {
   static const String _exercisesBox = 'exercises';
@@ -18,6 +19,7 @@ class StorageService {
   static const String _bodyMetricsBox = 'bodyMetrics';
   static const String _settingsBox = 'settings';
   static const String _routinesBox = 'workoutRoutines';
+  static const String _sleepLogsBox = 'sleepLogs';
 
   late Box<Exercise> exercisesBox;
   late Box<DayLog> dayLogsBox;
@@ -28,6 +30,7 @@ class StorageService {
   late Box<BodyMetrics> bodyMetricsBox;
   late Box settingsBox;
   late Box<WorkoutRoutine> routinesBox;
+  late Box<SleepLog> sleepLogsBox;
 
   Future<void> init() async {
     await Hive.initFlutter();
@@ -44,6 +47,7 @@ class StorageService {
     Hive.registerAdapter(WorkoutRoutineAdapter());
     Hive.registerAdapter(WorkoutSetAdapter());
     Hive.registerAdapter(ExerciseHistoryEntryAdapter());
+    Hive.registerAdapter(SleepLogAdapter());
 
     // Open boxes
     exercisesBox = await Hive.openBox<Exercise>(_exercisesBox);
@@ -55,6 +59,7 @@ class StorageService {
     bodyMetricsBox = await Hive.openBox<BodyMetrics>(_bodyMetricsBox);
     settingsBox = await Hive.openBox(_settingsBox);
     routinesBox = await Hive.openBox<WorkoutRoutine>(_routinesBox);
+    sleepLogsBox = await Hive.openBox<SleepLog>(_sleepLogsBox);
   }
 
   // --- Exercises ---
@@ -177,5 +182,19 @@ class StorageService {
 
   Future<void> deleteRoutine(String id) async {
     await routinesBox.delete(id);
+  }
+
+  // --- Sleep Logs ---
+  List<SleepLog> getAllSleepLogs() {
+    return sleepLogsBox.values.toList()
+      ..sort((a, b) => b.date.compareTo(a.date)); // Newest first
+  }
+
+  Future<void> saveSleepLog(SleepLog log) async {
+    await sleepLogsBox.put(log.id, log);
+  }
+
+  Future<void> deleteSleepLog(String id) async {
+    await sleepLogsBox.delete(id);
   }
 }
