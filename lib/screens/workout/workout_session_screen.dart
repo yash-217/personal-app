@@ -4,16 +4,23 @@ import 'package:uuid/uuid.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../models/exercise.dart';
+import '../../models/workout_routine.dart';
 import '../../models/workout_session.dart';
 import '../../providers/exercise_provider.dart';
 import '../../providers/workout_provider.dart';
 import '../../core/theme/app_colors.dart';
+import '../../providers/profile_provider.dart';
 import '../exercises/exercise_detail_screen.dart';
 
 class WorkoutSessionScreen extends StatefulWidget {
   final List<String>? initialExercises;
+  final WorkoutSession? existingSession;
 
-  const WorkoutSessionScreen({super.key, this.initialExercises});
+  const WorkoutSessionScreen({
+    super.key,
+    this.initialExercises,
+    this.existingSession,
+  });
 
   @override
   State<WorkoutSessionScreen> createState() => _WorkoutSessionScreenState();
@@ -26,6 +33,7 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
   WorkoutSession? _session;
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  final Map<String, List<WorkoutSet>> _performanceData = {};
 
   static const _muscleGroups = [
     'chest',
@@ -43,21 +51,33 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
   @override
   void initState() {
     super.initState();
-    if (widget.initialExercises != null &&
+    if (widget.existingSession != null) {
+      _session = widget.existingSession;
+      _step = 2; // Directly to tracking
+      // Muscle groups and exercises will be loaded in didChangeDependencies
+    } else if (widget.initialExercises != null &&
         widget.initialExercises!.isNotEmpty) {
       _step = 2; // Skip directly to tracking
-      // Implementation note: We need to load exercises in post-frame callback
-      // or here if provider is available. Better do it in didChangeDependencies
     }
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (widget.initialExercises != null && _selectedExercises.isEmpty) {
+    if (widget.existingSession != null && _selectedExercises.isEmpty) {
       final provider = context.read<ExerciseProvider>();
-      // Simple lookup
-      final all = provider.exercises;
+      final all = provider.allExercises;
+      for (var id in widget.existingSession!.exerciseIds) {
+        try {
+          final ex = all.firstWhere((e) => e.id == id);
+          _selectedExercises.add(ex);
+        } catch (_) {}
+      }
+      _selectedMuscleGroups.addAll(widget.existingSession!.targetMuscleGroups);
+      _performanceData.addAll(widget.existingSession!.performance);
+    } else if (widget.initialExercises != null && _selectedExercises.isEmpty) {
+      final provider = context.read<ExerciseProvider>();
+      final all = provider.allExercises;
       for (var id in widget.initialExercises!) {
         try {
           final ex = all.firstWhere((e) => e.id == id);
@@ -419,6 +439,12 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
               return _ExerciseTrackCard(
                 exercise: exercise,
                 index: index,
+                initialSets:
+                    _performanceData[exercise.id] ??
+                    [WorkoutSet(weightLbs: 0, weightKg: 0, reps: 0)],
+                onChanged: (sets) {
+                  _performanceData[exercise.id] = sets;
+                },
               ).animate().fadeIn(delay: (index * 80).ms);
             },
           ),
@@ -428,7 +454,11 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
           child: FilledButton.icon(
             onPressed: _finishWorkout,
             icon: const Icon(Icons.check_circle),
-            label: const Text('Finish Workout'),
+            label: Text(
+              widget.existingSession != null
+                  ? 'Update Workout'
+                  : 'Finish Workout',
+            ),
             style: FilledButton.styleFrom(
               minimumSize: const Size.fromHeight(52),
               backgroundColor: AppColors.success,
@@ -441,19 +471,182 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
 
   Future<void> _finishWorkout() async {
     if (_session == null) return;
-    final completedSession = _session!.copyWith(completed: true);
+
+    final completedSession = _session!.copyWith(
+      completed: true,
+      performance: _performanceData,
+    );
+
     final workoutProvider = context.read<WorkoutProvider>();
-    await workoutProvider.addGymSession(DateTime.now(), completedSession);
+    final exerciseProvider = context.read<ExerciseProvider>();
+
+    if (widget.existingSession != null) {
+      await workoutProvider.updateGymSession(
+        completedSession,
+        exerciseProvider,
+      );
+    } else {
+      await workoutProvider.addGymSession(
+        DateTime.now(),
+        completedSession,
+        exerciseProvider,
+      );
+    }
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Workout completed! 💪'),
+        SnackBar(
+          content: Text(
+            widget.existingSession != null
+                ? 'Workout updated!'
+                : 'Workout completed! 💪',
+          ),
           behavior: SnackBarBehavior.floating,
         ),
       );
-      Navigator.of(context).pop();
+
+      // Offer to save as routine if it was started from scratch
+      if (widget.existingSession == null &&
+          (widget.initialExercises == null ||
+              widget.initialExercises!.isEmpty)) {
+        final saveAsRoutine = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Workout Complete!'),
+            content: const Text(
+              'Would you like to save this workout as a routine for the future?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('No thanks'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Save as Routine'),
+              ),
+            ],
+          ),
+        );
+
+        if (saveAsRoutine == true && mounted) {
+          await _showSaveRoutineDialog(context, completedSession);
+        }
+      }
+
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
     }
+  }
+
+  Future<void> _showSaveRoutineDialog(
+    BuildContext context,
+    WorkoutSession session,
+  ) async {
+    final nameCtrl = TextEditingController();
+    int selectedColor = 0xFF2196F3;
+    final colors = [
+      0xFF2196F3,
+      0xFFF44336,
+      0xFF4CAF50,
+      0xFFFFC107,
+      0xFF9C27B0,
+      0xFFFF5722,
+      0xFFE91E63,
+      0xFF00BCD4,
+    ];
+
+    await showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final theme = Theme.of(context);
+            return AlertDialog(
+              title: const Text('Save as Routine'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextField(
+                    controller: nameCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Routine Name',
+                      hintText: 'e.g., Morning Push',
+                    ),
+                    autofocus: true,
+                  ),
+                  const SizedBox(height: 24),
+                  Text('Choose a color', style: theme.textTheme.titleSmall),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: colors.map((c) {
+                      final isSelected = selectedColor == c;
+                      return GestureDetector(
+                        onTap: () => setDialogState(() => selectedColor = c),
+                        child: Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: Color(c),
+                            shape: BoxShape.circle,
+                            border: isSelected
+                                ? Border.all(
+                                    color: theme.colorScheme.onSurface,
+                                    width: 2,
+                                  )
+                                : null,
+                            boxShadow: [
+                              if (isSelected)
+                                BoxShadow(
+                                  color: Color(c).withValues(alpha: 0.4),
+                                  blurRadius: 4,
+                                  spreadRadius: 1,
+                                ),
+                            ],
+                          ),
+                          child: isSelected
+                              ? const Icon(
+                                  Icons.check,
+                                  color: Colors.white,
+                                  size: 18,
+                                )
+                              : null,
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    if (nameCtrl.text.trim().isEmpty) return;
+                    final routine = WorkoutRoutine(
+                      id: const Uuid().v4(),
+                      name: nameCtrl.text.trim(),
+                      exerciseIds: session.exerciseIds,
+                      color: selectedColor,
+                      targetMuscles: session.targetMuscleGroups,
+                    );
+                    context.read<WorkoutProvider>().createRoutine(routine);
+                    Navigator.pop(ctx);
+                  },
+                  child: const Text('Save Routine'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   String _capitalize(String text) {
@@ -499,16 +692,29 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
 class _ExerciseTrackCard extends StatefulWidget {
   final Exercise exercise;
   final int index;
+  final List<WorkoutSet> initialSets;
+  final Function(List<WorkoutSet>) onChanged;
 
-  const _ExerciseTrackCard({required this.exercise, required this.index});
+  const _ExerciseTrackCard({
+    required this.exercise,
+    required this.index,
+    required this.initialSets,
+    required this.onChanged,
+  });
 
   @override
   State<_ExerciseTrackCard> createState() => _ExerciseTrackCardState();
 }
 
 class _ExerciseTrackCardState extends State<_ExerciseTrackCard> {
-  final List<_SetData> _sets = [_SetData()];
+  late List<WorkoutSet> _sets;
   bool _completed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _sets = List<WorkoutSet>.from(widget.initialSets);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -580,7 +786,7 @@ class _ExerciseTrackCardState extends State<_ExerciseTrackCard> {
                     Padding(
                       padding: const EdgeInsets.only(bottom: 8),
                       child: Text(
-                        'Weight (kg)',
+                        'Weight',
                         style: theme.textTheme.labelSmall,
                         textAlign: TextAlign.center,
                       ),
@@ -596,12 +802,17 @@ class _ExerciseTrackCardState extends State<_ExerciseTrackCard> {
                   ],
                 ),
                 ..._sets.asMap().entries.map((entry) {
+                  final setIndex = entry.key;
+                  final setData = entry.value;
+                  final profile = context.watch<ProfileProvider>().profile;
+                  final unit = profile?.weightUnit ?? 'kg';
+
                   return TableRow(
                     children: [
                       Padding(
                         padding: const EdgeInsets.symmetric(vertical: 4),
                         child: Text(
-                          '${entry.key + 1}',
+                          '${setIndex + 1}',
                           textAlign: TextAlign.center,
                           style: theme.textTheme.bodyMedium,
                         ),
@@ -611,26 +822,82 @@ class _ExerciseTrackCardState extends State<_ExerciseTrackCard> {
                           horizontal: 4,
                           vertical: 2,
                         ),
-                        child: SizedBox(
-                          height: 36,
-                          child: TextField(
-                            keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true,
-                            ),
-                            textAlign: TextAlign.center,
-                            style: theme.textTheme.bodyMedium,
-                            decoration: InputDecoration(
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
+                        child: Column(
+                          children: [
+                            SizedBox(
+                              height: 36,
+                              child: Builder(
+                                builder: (context) {
+                                  final text = unit == 'lbs'
+                                      ? (setData.weightLbs > 0
+                                            ? setData.weightLbs.toStringAsFixed(
+                                                1,
+                                              )
+                                            : '')
+                                      : (setData.weightKg > 0
+                                            ? setData.weightKg.toStringAsFixed(
+                                                1,
+                                              )
+                                            : '');
+                                  return TextField(
+                                    controller:
+                                        TextEditingController(text: text)
+                                          ..selection =
+                                              TextSelection.fromPosition(
+                                                TextPosition(
+                                                  offset: text.length,
+                                                ),
+                                              ),
+                                    keyboardType:
+                                        const TextInputType.numberWithOptions(
+                                          decimal: true,
+                                        ),
+                                    textAlign: TextAlign.center,
+                                    style: theme.textTheme.bodyMedium,
+                                    decoration: InputDecoration(
+                                      hintText: unit,
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 4,
+                                          ),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                    ),
+                                    onChanged: (v) {
+                                      final val = double.tryParse(v) ?? 0;
+                                      double lbs, kg;
+                                      if (unit == 'lbs') {
+                                        lbs = val;
+                                        kg = val / 2.20462;
+                                      } else {
+                                        kg = val;
+                                        lbs = val * 2.20462;
+                                      }
+                                      setState(() {
+                                        _sets[setIndex] = WorkoutSet(
+                                          weightLbs: lbs,
+                                          weightKg: kg,
+                                          reps: setData.reps,
+                                        );
+                                      });
+                                      widget.onChanged(_sets);
+                                    },
+                                  );
+                                },
                               ),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
+                            ),
+                            Text(
+                              unit == 'lbs'
+                                  ? '${setData.weightKg.toStringAsFixed(1)} kg'
+                                  : '${setData.weightLbs.toStringAsFixed(1)} lbs',
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                fontSize: 9,
+                                color: theme.colorScheme.onSurfaceVariant,
                               ),
                             ),
-                            onChanged: (v) =>
-                                entry.value.weight = double.tryParse(v),
-                          ),
+                          ],
                         ),
                       ),
                       Padding(
@@ -640,21 +907,41 @@ class _ExerciseTrackCardState extends State<_ExerciseTrackCard> {
                         ),
                         child: SizedBox(
                           height: 36,
-                          child: TextField(
-                            keyboardType: TextInputType.number,
-                            textAlign: TextAlign.center,
-                            style: theme.textTheme.bodyMedium,
-                            decoration: InputDecoration(
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                            ),
-                            onChanged: (v) =>
-                                entry.value.reps = int.tryParse(v),
+                          child: Builder(
+                            builder: (context) {
+                              final text = setData.reps > 0
+                                  ? setData.reps.toString()
+                                  : '';
+                              return TextField(
+                                controller: TextEditingController(text: text)
+                                  ..selection = TextSelection.fromPosition(
+                                    TextPosition(offset: text.length),
+                                  ),
+                                keyboardType: TextInputType.number,
+                                textAlign: TextAlign.center,
+                                style: theme.textTheme.bodyMedium,
+                                decoration: InputDecoration(
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                ),
+                                onChanged: (v) {
+                                  final val = int.tryParse(v) ?? 0;
+                                  setState(() {
+                                    _sets[setIndex] = WorkoutSet(
+                                      weightLbs: setData.weightLbs,
+                                      weightKg: setData.weightKg,
+                                      reps: val,
+                                    );
+                                  });
+                                  widget.onChanged(_sets);
+                                },
+                              );
+                            },
                           ),
                         ),
                       ),
@@ -666,7 +953,13 @@ class _ExerciseTrackCardState extends State<_ExerciseTrackCard> {
 
             const SizedBox(height: 8),
             TextButton.icon(
-              onPressed: () => setState(() => _sets.add(_SetData())),
+              onPressed: () {
+                setState(
+                  () =>
+                      _sets.add(WorkoutSet(weightLbs: 0, weightKg: 0, reps: 0)),
+                );
+                widget.onChanged(_sets);
+              },
               icon: const Icon(Icons.add, size: 16),
               label: const Text('Add Set'),
             ),
@@ -680,9 +973,4 @@ class _ExerciseTrackCardState extends State<_ExerciseTrackCard> {
     if (text.isEmpty) return text;
     return text[0].toUpperCase() + text.substring(1);
   }
-}
-
-class _SetData {
-  double? weight;
-  int? reps;
 }

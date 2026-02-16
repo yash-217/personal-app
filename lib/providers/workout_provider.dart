@@ -5,6 +5,8 @@ import '../models/workout_session.dart';
 import '../models/workout_routine.dart';
 import '../models/run_log.dart';
 import '../services/storage_service.dart';
+import 'exercise_provider.dart';
+import '../models/exercise.dart';
 
 class WorkoutProvider extends ChangeNotifier {
   static const _uuid = Uuid();
@@ -35,9 +37,16 @@ class WorkoutProvider extends ChangeNotifier {
 
   // --- Day Log Operations ---
   DayLog? getDayLogForDate(DateTime date) {
-    final key = _dateKey(date);
     try {
-      return _dayLogs.firstWhere((d) => d.dateKey == key);
+      return _dayLogs.firstWhere((d) => _dateKey(d.date) == _dateKey(date));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  WorkoutSession? getSessionById(String id) {
+    try {
+      return _sessions.firstWhere((s) => s.id == id);
     } catch (_) {
       return null;
     }
@@ -126,9 +135,28 @@ class WorkoutProvider extends ChangeNotifier {
   }
 
   /// Add a gym session to a day
-  Future<void> addGymSession(DateTime date, WorkoutSession session) async {
+  Future<void> addGymSession(
+    DateTime date,
+    WorkoutSession session,
+    ExerciseProvider exerciseProvider,
+  ) async {
     await _storage.saveSession(session);
     _sessions.add(session);
+
+    // Update exercise history
+    for (var exerciseId in session.performance.keys) {
+      final sets = session.performance[exerciseId]!;
+      final entries = sets.map((s) {
+        return ExerciseHistoryEntry(
+          date: session.date,
+          weightLbs: s.weightLbs,
+          weightKg: s.weightKg,
+          reps: s.reps,
+          sessionId: session.id,
+        );
+      }).toList();
+      await exerciseProvider.addHistoryEntries(exerciseId, entries);
+    }
 
     final existing = getDayLogForDate(date);
     if (existing != null) {
@@ -153,6 +181,32 @@ class WorkoutProvider extends ChangeNotifier {
       await _storage.saveDayLog(log);
       _dayLogs.add(log);
     }
+    notifyListeners();
+  }
+
+  Future<void> updateGymSession(
+    WorkoutSession session,
+    ExerciseProvider exerciseProvider,
+  ) async {
+    await _storage.saveSession(session);
+    final index = _sessions.indexWhere((s) => s.id == session.id);
+    if (index >= 0) _sessions[index] = session;
+
+    // Update exercise history
+    for (var exerciseId in session.performance.keys) {
+      final sets = session.performance[exerciseId]!;
+      final entries = sets.map((s) {
+        return ExerciseHistoryEntry(
+          date: session.date,
+          weightLbs: s.weightLbs,
+          weightKg: s.weightKg,
+          reps: s.reps,
+          sessionId: session.id,
+        );
+      }).toList();
+      await exerciseProvider.updateHistory(exerciseId, session.id, entries);
+    }
+
     notifyListeners();
   }
 

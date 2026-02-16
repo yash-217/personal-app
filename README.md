@@ -1,6 +1,6 @@
 # FitPrint 🏋️‍♂️
 
-FitPrint is an all-in-one fitness tracker designed to help you leave your mark on your fitness journey. With a focus on rich aesthetics and a high-performance user experience, FitPrint combines workout tracking, run logging and body metrics into a single, cohesive ecosystem.
+FitPrint is an all-in-one health tracker designed to help you leave your mark on your fitness journey. With a focus on rich aesthetics and a high-performance user experience, FitPrint combines workout tracking, sleep logging and body metrics into a single, cohesive ecosystem.
 
 ## ✨ Features
 
@@ -19,6 +19,11 @@ FitPrint is an all-in-one fitness tracker designed to help you leave your mark o
 *   **Comprehensive Tracking:** Log weight, body fat percentage, BMI, bone mass, visceral fat, and more.
 *   **Chart Visualizations:** Beautiful, interactive charts to visualize your physical transformation over time.
 *   **Health Insights:** Automatic BMI categorization and target goal monitoring.
+
+### 😴 Sleep Tracking
+*   **Comprehensive Tracking:** Log sleep duration, quality, and wake-up times.
+*   **Chart Visualizations:** Beautiful, interactive charts to visualize your sleep patterns over time.
+*   **Health Insights:** Automatic sleep quality categorization and target goal monitoring.
 
 ## 🎨 Design Philosophy
 

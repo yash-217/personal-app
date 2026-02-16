@@ -10,6 +10,7 @@ import '../../providers/profile_provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../workout/workout_session_screen.dart';
 import 'run_import_screen.dart';
+import '../../widgets/confirm_dialog.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -90,18 +91,27 @@ class _DashboardScreenState extends State<DashboardScreen>
                       '${_getGreeting()}, $name',
                       style: theme.textTheme.headlineMedium,
                     ).animate().fadeIn(duration: 400.ms).slideX(begin: -0.1),
-                    const SizedBox(height: 4),
-                    Text(
-                      '🔥 ${workout.currentStreak} day streak',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.colorScheme.primary,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+                    const SizedBox(height: 8),
                   ],
                 ),
               ),
             ),
+
+            // Stats Row (Streak Row)
+            SliverToBoxAdapter(child: _buildStatsRow(theme, workout)),
+
+            // Weekly Progress
+            SliverToBoxAdapter(
+              child: _buildWeeklyProgress(
+                theme,
+                gymThisWeek,
+                weeklyGoal,
+                workout,
+              ),
+            ),
+
+            // Activity Stats (Activity This Month)
+            SliverToBoxAdapter(child: _buildActivityStats(theme, workout)),
 
             // Calendar
             SliverToBoxAdapter(
@@ -200,22 +210,6 @@ class _DashboardScreenState extends State<DashboardScreen>
                 ),
               ).animate().fadeIn(duration: 500.ms, delay: 100.ms),
             ),
-
-            // Weekly Progress
-            SliverToBoxAdapter(
-              child: _buildWeeklyProgress(
-                theme,
-                gymThisWeek,
-                weeklyGoal,
-                workout,
-              ),
-            ),
-
-            // Activity Stats
-            SliverToBoxAdapter(child: _buildActivityStats(theme, workout)),
-
-            // Stats Row
-            SliverToBoxAdapter(child: _buildStatsRow(theme, workout)),
 
             const SliverToBoxAdapter(child: SizedBox(height: 100)),
           ],
@@ -804,30 +798,13 @@ class _DashboardScreenState extends State<DashboardScreen>
                           color: Theme.of(ctx).colorScheme.error,
                         ),
                         onPressed: () async {
-                          final confirmed = await showDialog<bool>(
-                            context: ctx,
-                            builder: (dCtx) => AlertDialog(
-                              title: const Text('Delete Activity'),
-                              content: Text('Remove $label from this day?'),
-                              actions: [
-                                TextButton(
-                                  onPressed: () =>
-                                      Navigator.of(dCtx).pop(false),
-                                  child: const Text('Cancel'),
-                                ),
-                                FilledButton(
-                                  onPressed: () => Navigator.of(dCtx).pop(true),
-                                  style: FilledButton.styleFrom(
-                                    backgroundColor: Theme.of(
-                                      dCtx,
-                                    ).colorScheme.error,
-                                  ),
-                                  child: const Text('Delete'),
-                                ),
-                              ],
-                            ),
+                          final confirm = await ConfirmDialog.show(
+                            ctx,
+                            title: 'Delete Activity',
+                            message:
+                                'Are you sure you want to delete this $label activity?',
                           );
-                          if (confirmed == true) {
+                          if (confirm == true) {
                             await workout.removeActivity(day, type);
                             if (ctx.mounted) {
                               setSheetState(() {});

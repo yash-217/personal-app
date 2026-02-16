@@ -1,53 +1,53 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND
 
-part of 'user_profile.dart';
+part of 'sleep_log.dart';
 
 // **************************************************************************
 // TypeAdapterGenerator
 // **************************************************************************
 
-class UserProfileAdapter extends TypeAdapter<UserProfile> {
+class SleepLogAdapter extends TypeAdapter<SleepLog> {
   @override
-  final typeId = 6;
+  final typeId = 13;
 
   @override
-  UserProfile read(BinaryReader reader) {
+  SleepLog read(BinaryReader reader) {
     final numOfFields = reader.readByte();
     final fields = <int, dynamic>{
       for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
     };
-    return UserProfile(
-      name: fields[0] as String,
-      age: (fields[1] as num).toInt(),
-      height: (fields[2] as num).toDouble(),
-      weight: (fields[3] as num).toDouble(),
-      gender: fields[4] as String,
-      weeklyGoal: fields[5] == null ? 4 : (fields[5] as num).toInt(),
-      weightUnit: fields[6] == null ? 'kg' : fields[6] as String,
-      birthDate: fields[7] as DateTime?,
+    return SleepLog(
+      id: fields[0] as String,
+      date: fields[1] as DateTime,
+      bedtime: fields[2] as DateTime,
+      wakeTime: fields[3] as DateTime,
+      avoidedScreentime: fields[4] == null ? false : fields[4] as bool,
+      quality: fields[5] == null ? 5 : (fields[5] as num).toInt(),
+      mood: fields[6] as String?,
+      notes: fields[7] as String?,
     );
   }
 
   @override
-  void write(BinaryWriter writer, UserProfile obj) {
+  void write(BinaryWriter writer, SleepLog obj) {
     writer
       ..writeByte(8)
       ..writeByte(0)
-      ..write(obj.name)
+      ..write(obj.id)
       ..writeByte(1)
-      ..write(obj.age)
+      ..write(obj.date)
       ..writeByte(2)
-      ..write(obj.height)
+      ..write(obj.bedtime)
       ..writeByte(3)
-      ..write(obj.weight)
+      ..write(obj.wakeTime)
       ..writeByte(4)
-      ..write(obj.gender)
+      ..write(obj.avoidedScreentime)
       ..writeByte(5)
-      ..write(obj.weeklyGoal)
+      ..write(obj.quality)
       ..writeByte(6)
-      ..write(obj.weightUnit)
+      ..write(obj.mood)
       ..writeByte(7)
-      ..write(obj.birthDate);
+      ..write(obj.notes);
   }
 
   @override
@@ -56,7 +56,7 @@ class UserProfileAdapter extends TypeAdapter<UserProfile> {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is UserProfileAdapter &&
+      other is SleepLogAdapter &&
           runtimeType == other.runtimeType &&
           typeId == other.typeId;
 }

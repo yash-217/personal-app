@@ -8,7 +8,7 @@ class UserProfile extends HiveObject {
   final String name;
 
   @HiveField(1)
-  final int age;
+  final int age; // Legacy field, now calculated from birthDate if available
 
   @HiveField(2)
   final double height; // cm
@@ -22,6 +22,12 @@ class UserProfile extends HiveObject {
   @HiveField(5)
   final int weeklyGoal; // gym days per week
 
+  @HiveField(6)
+  final String weightUnit; // 'kg' or 'lbs'
+
+  @HiveField(7)
+  final DateTime? birthDate;
+
   UserProfile({
     required this.name,
     required this.age,
@@ -29,7 +35,20 @@ class UserProfile extends HiveObject {
     required this.weight,
     required this.gender,
     this.weeklyGoal = 4,
+    this.weightUnit = 'kg',
+    this.birthDate,
   });
+
+  int get calculatedAge {
+    if (birthDate == null) return age;
+    final now = DateTime.now();
+    int ageYears = now.year - birthDate!.year;
+    if (now.month < birthDate!.month ||
+        (now.month == birthDate!.month && now.day < birthDate!.day)) {
+      ageYears--;
+    }
+    return ageYears;
+  }
 
   double get bmi {
     if (height <= 0) return 0;
@@ -52,6 +71,8 @@ class UserProfile extends HiveObject {
     double? weight,
     String? gender,
     int? weeklyGoal,
+    String? weightUnit,
+    DateTime? birthDate,
   }) {
     return UserProfile(
       name: name ?? this.name,
@@ -60,6 +81,8 @@ class UserProfile extends HiveObject {
       weight: weight ?? this.weight,
       gender: gender ?? this.gender,
       weeklyGoal: weeklyGoal ?? this.weeklyGoal,
+      weightUnit: weightUnit ?? this.weightUnit,
+      birthDate: birthDate ?? this.birthDate,
     );
   }
 }

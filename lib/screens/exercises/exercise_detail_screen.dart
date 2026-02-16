@@ -7,6 +7,10 @@ import '../../models/exercise.dart';
 import '../../models/weight_entry.dart';
 import '../../providers/exercise_provider.dart';
 import '../../core/theme/app_colors.dart';
+import '../../providers/profile_provider.dart';
+import '../../providers/workout_provider.dart';
+import '../workout/workout_session_screen.dart';
+import '../../widgets/confirm_dialog.dart';
 
 class ExerciseDetailScreen extends StatelessWidget {
   final Exercise exercise;
@@ -17,6 +21,11 @@ class ExerciseDetailScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final provider = context.watch<ExerciseProvider>();
+    final workoutProvider = context.watch<WorkoutProvider>();
+    final profile = context.watch<ProfileProvider>().profile;
+    final unit = profile?.weightUnit ?? 'kg';
+
+    final history = exercise.history;
     final weightEntries = provider.getWeightEntries(exercise.id);
     final color = AppColors.getBodyPartColor(exercise.bodyPart);
 
@@ -143,44 +152,84 @@ class ExerciseDetailScreen extends StatelessWidget {
                     }),
                   ],
 
-                  // Weight progression
+                  // Exercise History (New detailed tracking)
                   const SizedBox(height: 24),
-                  Text(
-                    'Weight Progression',
-                    style: theme.textTheme.titleMedium,
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Performance History',
+                        style: theme.textTheme.titleMedium,
+                      ),
+                      if (history.isNotEmpty)
+                        Text(
+                          'Last: ${unit == 'lbs' ? history.last.weightLbs.toStringAsFixed(1) : history.last.weightKg.toStringAsFixed(1)} $unit',
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: color,
+                          ),
+                        ),
+                    ],
                   ),
                   const SizedBox(height: 12),
 
-                  if (weightEntries.isEmpty)
+                  if (history.isEmpty)
                     Card(
                       child: Padding(
                         padding: const EdgeInsets.all(24),
                         child: Column(
                           children: [
                             Icon(
-                              Icons.show_chart,
+                              Icons.history,
                               size: 48,
                               color: theme.colorScheme.onSurfaceVariant,
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              'No entries yet',
+                              'No performance data yet',
                               style: theme.textTheme.bodyMedium,
                             ),
                             Text(
-                              'Tap + to log your weight for this exercise',
+                              'Complete a workout session to see history',
                               style: theme.textTheme.bodySmall,
                             ),
                           ],
                         ),
                       ),
-                    )
+                    ).animate().fadeIn()
                   else ...[
-                    _buildWeightChart(theme, weightEntries, color),
+                    _buildPerformanceChart(theme, history, color, unit),
                     const SizedBox(height: 16),
+                    ...history.reversed.map((e) {
+                      return _buildHistoryEntryTile(
+                        context,
+                        theme,
+                        e,
+                        workoutProvider,
+                        unit,
+                      );
+                    }),
+                  ],
+
+                  // Legacy Weight progression
+                  if (weightEntries.isNotEmpty) ...[
+                    const SizedBox(height: 32),
+                    Text(
+                      'Manual Logs (Legacy)',
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
                     ...weightEntries.reversed
-                        .take(10)
-                        .map((e) => _buildWeightEntryTile(theme, e, provider)),
+                        .take(5)
+                        .map(
+                          (e) => _buildWeightEntryTile(
+                            context,
+                            theme,
+                            e,
+                            provider,
+                          ),
+                        ),
                   ],
 
                   const SizedBox(height: 80), // FAB spacing
@@ -207,15 +256,21 @@ class ExerciseDetailScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildWeightChart(
+  Widget _buildPerformanceChart(
     ThemeData theme,
-    List<WeightEntry> entries,
+    List<ExerciseHistoryEntry> history,
     Color color,
+    String unit,
   ) {
-    final spots = entries
+    final spots = history
         .asMap()
         .entries
-        .map((e) => FlSpot(e.key.toDouble(), e.value.weight))
+        .map(
+          (e) => FlSpot(
+            e.key.toDouble(),
+            unit == 'lbs' ? e.value.weightLbs : e.value.weightKg,
+          ),
+        )
         .toList();
 
     return SizedBox(
@@ -226,7 +281,7 @@ class ExerciseDetailScreen extends StatelessWidget {
             show: true,
             drawVerticalLine: false,
             getDrawingHorizontalLine: (value) => FlLine(
-              color: theme.colorScheme.outline.withValues(alpha: 0.2),
+              color: theme.colorScheme.outline.withValues(alpha: 0.1),
               strokeWidth: 1,
             ),
           ),
@@ -243,10 +298,10 @@ class ExerciseDetailScreen extends StatelessWidget {
             leftTitles: AxisTitles(
               sideTitles: SideTitles(
                 showTitles: true,
-                reservedSize: 40,
+                reservedSize: 45,
                 getTitlesWidget: (value, meta) => Text(
-                  '${value.toInt()} kg',
-                  style: theme.textTheme.labelSmall,
+                  '${value.toInt()} $unit',
+                  style: theme.textTheme.labelSmall?.copyWith(fontSize: 10),
                 ),
               ),
             ),
@@ -257,7 +312,8 @@ class ExerciseDetailScreen extends StatelessWidget {
               spots: spots,
               isCurved: true,
               color: color,
-              barWidth: 3,
+              barWidth: 4,
+              isStrokeCapRound: true,
               dotData: FlDotData(
                 show: true,
                 getDotPainter: (spot, progress, bar, index) =>
@@ -270,7 +326,14 @@ class ExerciseDetailScreen extends StatelessWidget {
               ),
               belowBarData: BarAreaData(
                 show: true,
-                color: color.withValues(alpha: 0.1),
+                gradient: LinearGradient(
+                  colors: [
+                    color.withValues(alpha: 0.3),
+                    color.withValues(alpha: 0.0),
+                  ],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                ),
               ),
             ),
           ],
@@ -278,9 +341,10 @@ class ExerciseDetailScreen extends StatelessWidget {
             touchTooltipData: LineTouchTooltipData(
               getTooltipItems: (touchedSpots) {
                 return touchedSpots.map((spot) {
-                  final entry = entries[spot.x.toInt()];
+                  final entry = history[spot.x.toInt()];
+                  final w = unit == 'lbs' ? entry.weightLbs : entry.weightKg;
                   return LineTooltipItem(
-                    '${entry.weight} kg\n${entry.reps ?? '-'}×${entry.sets ?? '-'}',
+                    '${w.toStringAsFixed(1)} $unit\n${entry.reps} reps',
                     TextStyle(color: color, fontWeight: FontWeight.bold),
                   );
                 }).toList();
@@ -292,7 +356,72 @@ class ExerciseDetailScreen extends StatelessWidget {
     );
   }
 
+  Widget _buildHistoryEntryTile(
+    BuildContext context,
+    ThemeData theme,
+    ExerciseHistoryEntry entry,
+    WorkoutProvider workoutProvider,
+    String unit,
+  ) {
+    final weight = unit == 'lbs' ? entry.weightLbs : entry.weightKg;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ListTile(
+        onTap: () {
+          final sessionId = entry.sessionId;
+          if (sessionId.isNotEmpty) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => WorkoutSessionScreen(
+                  existingSession: workoutProvider.getSessionById(sessionId),
+                ),
+              ),
+            );
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Session data not found')),
+            );
+          }
+        },
+        leading: Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: theme.colorScheme.primaryContainer,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Center(
+            child: Text(
+              weight.toStringAsFixed(0),
+              style: theme.textTheme.titleMedium?.copyWith(
+                color: theme.colorScheme.onPrimaryContainer,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ),
+        title: Text(
+          '${weight.toStringAsFixed(1)} $unit × ${entry.reps} reps',
+          style: theme.textTheme.bodyLarge?.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        subtitle: Text(
+          '${entry.date.day}/${entry.date.month}/${entry.date.year}',
+          style: theme.textTheme.bodySmall,
+        ),
+        trailing: Icon(
+          Icons.chevron_right,
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
+      ),
+    );
+  }
+
   Widget _buildWeightEntryTile(
+    BuildContext context,
     ThemeData theme,
     WeightEntry entry,
     ExerciseProvider provider,
@@ -320,7 +449,16 @@ class ExerciseDetailScreen extends StatelessWidget {
         ),
         trailing: IconButton(
           icon: const Icon(Icons.delete_outline, size: 20),
-          onPressed: () => provider.deleteWeightEntry(entry.id),
+          onPressed: () async {
+            final confirm = await ConfirmDialog.show(
+              context,
+              title: 'Delete Entry',
+              message: 'Are you sure you want to delete this weight entry?',
+            );
+            if (confirm) {
+              provider.deleteWeightEntry(entry.id);
+            }
+          },
         ),
       ),
     );

@@ -96,35 +96,41 @@ class AppTheme {
     final colorScheme = ColorScheme.fromSeed(
       seedColor: AppColors.seed,
       brightness: Brightness.dark,
-    );
+    ).copyWith(surface: Colors.black, onSurface: Colors.white);
 
     return ThemeData(
       useMaterial3: true,
       colorScheme: colorScheme,
-      scaffoldBackgroundColor: const Color(0xFF121212),
+      scaffoldBackgroundColor: Colors.black,
       textTheme: _buildTextTheme(colorScheme),
       appBarTheme: AppBarTheme(
         centerTitle: true,
         elevation: 0,
-        backgroundColor: const Color(0xFF121212),
-        foregroundColor: colorScheme.onSurface,
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
         titleTextStyle: GoogleFonts.outfit(
           fontSize: 20,
           fontWeight: FontWeight.w600,
-          color: colorScheme.onSurface,
+          color: Colors.white,
         ),
       ),
       cardTheme: CardThemeData(
         elevation: 0,
-        color: const Color(0xFF1E1E1E),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        color: const Color(0xFF121212),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(
+            color: Colors.white.withValues(alpha: 0.05),
+            width: 1,
+          ),
+        ),
         clipBehavior: Clip.antiAlias,
       ),
       bottomNavigationBarTheme: BottomNavigationBarThemeData(
         type: BottomNavigationBarType.fixed,
         selectedItemColor: colorScheme.primary,
         unselectedItemColor: colorScheme.onSurfaceVariant,
-        backgroundColor: const Color(0xFF1E1E1E),
+        backgroundColor: Colors.black,
         elevation: 8,
         selectedLabelStyle: GoogleFonts.inter(
           fontSize: 12,
@@ -134,6 +140,24 @@ class AppTheme {
           fontSize: 12,
           fontWeight: FontWeight.w400,
         ),
+      ),
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: Colors.black,
+        indicatorColor: colorScheme.primary.withValues(alpha: 0.2),
+        labelTextStyle: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return GoogleFonts.inter(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: colorScheme.primary,
+            );
+          }
+          return GoogleFonts.inter(
+            fontSize: 12,
+            fontWeight: FontWeight.w400,
+            color: colorScheme.onSurfaceVariant,
+          );
+        }),
       ),
       floatingActionButtonTheme: FloatingActionButtonThemeData(
         backgroundColor: colorScheme.primary,

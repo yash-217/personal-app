@@ -7,6 +7,7 @@ import 'providers/theme_provider.dart';
 import 'providers/workout_provider.dart';
 import 'providers/exercise_provider.dart';
 import 'providers/profile_provider.dart';
+import 'providers/sleep_provider.dart';
 import 'screens/main_shell.dart';
 
 void main() async {
@@ -26,6 +27,7 @@ void main() async {
           create: (_) => ExerciseProvider(exerciseApi, storage),
         ),
         ChangeNotifierProvider(create: (_) => ProfileProvider(storage)),
+        ChangeNotifierProvider(create: (_) => SleepProvider(storage)),
       ],
       child: const GymTrackerApp(),
     ),

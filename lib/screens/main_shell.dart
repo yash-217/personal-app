@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'dashboard/dashboard_screen.dart';
 import 'gym/gym_screen.dart';
 import 'profile/profile_screen.dart';
+import 'sleep/sleep_screen.dart';
 
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
@@ -15,6 +16,7 @@ class _MainShellState extends State<MainShell> {
   int _currentIndex = 0;
 
   final _navigatorKeys = [
+    GlobalKey<NavigatorState>(),
     GlobalKey<NavigatorState>(),
     GlobalKey<NavigatorState>(),
     GlobalKey<NavigatorState>(),
@@ -45,7 +47,8 @@ class _MainShellState extends State<MainShell> {
           children: [
             _buildNavigator(0, const DashboardScreen()),
             _buildNavigator(1, const GymScreen()),
-            _buildNavigator(2, const ProfileScreen()),
+            _buildNavigator(2, const SleepScreen()),
+            _buildNavigator(3, const ProfileScreen()),
           ],
         ),
         bottomNavigationBar: NavigationBar(
@@ -69,6 +72,11 @@ class _MainShellState extends State<MainShell> {
               icon: Icon(Icons.fitness_center_outlined),
               selectedIcon: Icon(Icons.fitness_center),
               label: 'Gym',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.bedtime_outlined),
+              selectedIcon: Icon(Icons.bedtime),
+              label: 'Sleep',
             ),
             NavigationDestination(
               icon: Icon(Icons.person_outlined),
