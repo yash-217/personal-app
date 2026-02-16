@@ -2,15 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import '../../models/exercise.dart';
 import '../../models/workout_routine.dart';
 import '../../models/workout_session.dart';
 import '../../providers/exercise_provider.dart';
 import '../../providers/workout_provider.dart';
 import '../../core/theme/app_colors.dart';
-import '../../providers/profile_provider.dart';
-import '../exercises/exercise_detail_screen.dart';
+import 'widgets/muscle_group_selector.dart';
+import 'widgets/exercise_selector.dart';
+import 'widgets/exercise_track_card.dart';
 
 class WorkoutSessionScreen extends StatefulWidget {
   final List<String>? initialExercises;
@@ -31,8 +31,6 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
   final List<String> _selectedMuscleGroups = [];
   final List<Exercise> _selectedExercises = [];
   WorkoutSession? _session;
-  final TextEditingController _searchController = TextEditingController();
-  String _searchQuery = '';
   final Map<String, List<WorkoutSet>> _performanceData = {};
 
   static const _muscleGroups = [
@@ -91,15 +89,7 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
   }
 
   @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     return Scaffold(
       appBar: AppBar(
         title: Text(_stepTitle),
@@ -113,9 +103,9 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
       body: AnimatedSwitcher(
         duration: const Duration(milliseconds: 300),
         child: [
-          _buildMuscleGroupStep(theme),
-          _buildExerciseSelectionStep(theme),
-          _buildTrackingStep(theme),
+          _buildMuscleGroupStep(),
+          _buildExerciseSelectionStep(),
+          _buildTrackingStep(),
         ][_step],
       ),
     );
@@ -135,284 +125,35 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
   }
 
   // --- Step 1: Muscle Groups ---
-  Widget _buildMuscleGroupStep(ThemeData theme) {
-    return Column(
+  Widget _buildMuscleGroupStep() {
+    return MuscleGroupSelector(
       key: const ValueKey('step0'),
-      children: [
-        Expanded(
-          child: ListView(
-            padding: const EdgeInsets.all(16),
-            children: _muscleGroups.map((group) {
-              final selected = _selectedMuscleGroups.contains(group);
-              final color = AppColors.getBodyPartColor(group);
-              return Card(
-                margin: const EdgeInsets.only(bottom: 8),
-                child: ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: color.withValues(
-                      alpha: selected ? 0.3 : 0.1,
-                    ),
-                    child: Icon(
-                      selected ? Icons.check : Icons.fitness_center,
-                      color: color,
-                      size: 20,
-                    ),
-                  ),
-                  title: Text(
-                    _capitalize(group),
-                    style: theme.textTheme.titleSmall,
-                  ),
-                  selected: selected,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    side: selected
-                        ? BorderSide(color: color, width: 2)
-                        : BorderSide.none,
-                  ),
-                  onTap: () {
-                    setState(() {
-                      if (selected) {
-                        _selectedMuscleGroups.remove(group);
-                      } else {
-                        _selectedMuscleGroups.add(group);
-                      }
-                    });
-                  },
-                ),
-              );
-            }).toList(),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: FilledButton.icon(
-            onPressed: _selectedMuscleGroups.isNotEmpty
-                ? () => setState(() => _step = 1)
-                : null,
-            icon: const Icon(Icons.arrow_forward),
-            label: Text('Next (${_selectedMuscleGroups.length} selected)'),
-            style: FilledButton.styleFrom(
-              minimumSize: const Size.fromHeight(52),
-            ),
-          ),
-        ),
-      ],
+      initialMuscleGroups: _selectedMuscleGroups,
+      muscleGroupsList: _muscleGroups,
+      onNext: (selected) {
+        setState(() {
+          _selectedMuscleGroups.clear();
+          _selectedMuscleGroups.addAll(selected);
+          _step = 1;
+        });
+      },
     );
   }
 
   // --- Step 2: Exercise Selection ---
-  Widget _buildExerciseSelectionStep(ThemeData theme) {
-    final provider = context.watch<ExerciseProvider>();
-    final allForMuscles = provider.getExercisesForMuscleGroups(
-      _selectedMuscleGroups,
-    );
-
-    final filteredExercises = allForMuscles.where((e) {
-      if (_searchQuery.isEmpty) return true;
-      return e.name.toLowerCase().contains(_searchQuery.toLowerCase());
-    }).toList();
-
-    return Column(
+  Widget _buildExerciseSelectionStep() {
+    return ExerciseSelector(
       key: const ValueKey('step1'),
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: SearchBar(
-            controller: _searchController,
-            hintText: 'Search exercises...',
-            leading: const Icon(Icons.search),
-            trailing: [
-              if (_searchQuery.isNotEmpty)
-                IconButton(
-                  icon: const Icon(Icons.clear),
-                  onPressed: () {
-                    _searchController.clear();
-                    setState(() => _searchQuery = '');
-                  },
-                ),
-            ],
-            onChanged: (value) {
-              setState(() => _searchQuery = value);
-            },
-            elevation: WidgetStateProperty.all(0),
-            backgroundColor: WidgetStateProperty.all(
-              theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-            ),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Text(
-            '${_selectedExercises.length} exercises selected',
-            style: theme.textTheme.bodySmall,
-          ),
-        ),
-        Expanded(
-          child: filteredExercises.isEmpty
-              ? Center(
-                  child: Text(
-                    'No exercises found for selected muscles',
-                    style: theme.textTheme.bodyMedium,
-                  ),
-                )
-              : ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  itemCount: filteredExercises.length,
-                  itemBuilder: (context, index) {
-                    final exercise = filteredExercises[index];
-                    final selected = _selectedExercises.contains(exercise);
-                    final color = AppColors.getBodyPartColor(exercise.bodyPart);
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 4),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        side: selected
-                            ? BorderSide(
-                                color: theme.colorScheme.primary,
-                                width: 2,
-                              )
-                            : BorderSide.none,
-                      ),
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(12),
-                        onTap: () {
-                          setState(() {
-                            if (selected) {
-                              _selectedExercises.remove(exercise);
-                            } else {
-                              _selectedExercises.add(exercise);
-                            }
-                          });
-                        },
-                        child: Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: Row(
-                            children: [
-                              SizedBox(
-                                width: 24,
-                                child: Checkbox(
-                                  value: selected,
-                                  onChanged: (val) {
-                                    setState(() {
-                                      if (val == true) {
-                                        _selectedExercises.add(exercise);
-                                      } else {
-                                        _selectedExercises.remove(exercise);
-                                      }
-                                    });
-                                  },
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Hero(
-                                tag: 'session-exercise-${exercise.id}',
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(12),
-                                  child: CachedNetworkImage(
-                                    imageUrl: exercise.gifUrl,
-                                    width: 60,
-                                    height: 60,
-                                    fit: BoxFit.cover,
-                                    placeholder: (_, _) => Container(
-                                      width: 60,
-                                      height: 60,
-                                      color: color.withValues(alpha: 0.1),
-                                      child: Icon(
-                                        Icons.fitness_center,
-                                        color: color,
-                                      ),
-                                    ),
-                                    errorWidget: (_, _, _) => Container(
-                                      width: 60,
-                                      height: 60,
-                                      color: color.withValues(alpha: 0.1),
-                                      child: Icon(
-                                        Icons.fitness_center,
-                                        color: color,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      _capitalize(exercise.name),
-                                      style: theme.textTheme.titleSmall,
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      '${_capitalize(exercise.targetMuscle)} · ${_capitalize(exercise.equipment)}',
-                                      style: theme.textTheme.bodySmall,
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 6,
-                                        vertical: 1,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: _difficultyColor(
-                                          exercise.difficulty,
-                                        ).withValues(alpha: 0.15),
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
-                                      child: Text(
-                                        '${_difficultyEmoji(exercise.difficulty)} ${exercise.difficulty}',
-                                        style: theme.textTheme.labelSmall
-                                            ?.copyWith(
-                                              color: _difficultyColor(
-                                                exercise.difficulty,
-                                              ),
-                                              fontSize: 10,
-                                            ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.info_outline),
-                                onPressed: () {
-                                  Navigator.of(context).push(
-                                    MaterialPageRoute(
-                                      builder: (_) => ExerciseDetailScreen(
-                                        exercise: exercise,
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-        ),
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: FilledButton.icon(
-            onPressed: _selectedExercises.isNotEmpty
-                ? () {
-                    _createSession();
-                    setState(() => _step = 2);
-                  }
-                : null,
-            icon: const Icon(Icons.play_arrow),
-            label: Text('Start (${_selectedExercises.length} exercises)'),
-            style: FilledButton.styleFrom(
-              minimumSize: const Size.fromHeight(52),
-            ),
-          ),
-        ),
-      ],
+      selectedMuscleGroups: _selectedMuscleGroups,
+      initialSelectedExercises: _selectedExercises,
+      onStart: (selected) {
+        setState(() {
+          _selectedExercises.clear();
+          _selectedExercises.addAll(selected);
+          _createSession();
+          _step = 2;
+        });
+      },
     );
   }
 
@@ -426,7 +167,7 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
   }
 
   // --- Step 3: Track Workout ---
-  Widget _buildTrackingStep(ThemeData theme) {
+  Widget _buildTrackingStep() {
     return Column(
       key: const ValueKey('step2'),
       children: [
@@ -436,7 +177,7 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
             itemCount: _selectedExercises.length,
             itemBuilder: (context, index) {
               final exercise = _selectedExercises[index];
-              return _ExerciseTrackCard(
+              return ExerciseTrackCard(
                 exercise: exercise,
                 index: index,
                 initialSets:
@@ -647,330 +388,5 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
         );
       },
     );
-  }
-
-  String _capitalize(String text) {
-    if (text.isEmpty) return text;
-    return text[0].toUpperCase() + text.substring(1);
-  }
-
-  String _difficultyEmoji(String difficulty) {
-    switch (difficulty) {
-      case 'Rookie':
-        return '🌱';
-      case 'Regular':
-        return '💪';
-      case 'Gym Bro':
-        return '🏋';
-      case 'Lifter':
-        return '🔥';
-      case 'Veteran':
-        return '⭐';
-      default:
-        return '💪';
-    }
-  }
-
-  Color _difficultyColor(String difficulty) {
-    switch (difficulty) {
-      case 'Rookie':
-        return Colors.green;
-      case 'Regular':
-        return Colors.blue;
-      case 'Gym Bro':
-        return Colors.orange;
-      case 'Lifter':
-        return Colors.deepOrange;
-      case 'Veteran':
-        return Colors.red;
-      default:
-        return Colors.blue;
-    }
-  }
-}
-
-class _ExerciseTrackCard extends StatefulWidget {
-  final Exercise exercise;
-  final int index;
-  final List<WorkoutSet> initialSets;
-  final Function(List<WorkoutSet>) onChanged;
-
-  const _ExerciseTrackCard({
-    required this.exercise,
-    required this.index,
-    required this.initialSets,
-    required this.onChanged,
-  });
-
-  @override
-  State<_ExerciseTrackCard> createState() => _ExerciseTrackCardState();
-}
-
-class _ExerciseTrackCardState extends State<_ExerciseTrackCard> {
-  late List<WorkoutSet> _sets;
-  bool _completed = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _sets = List<WorkoutSet>.from(widget.initialSets);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final color = AppColors.getBodyPartColor(widget.exercise.bodyPart);
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: _completed
-            ? BorderSide(color: AppColors.success, width: 2)
-            : BorderSide.none,
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                CircleAvatar(
-                  backgroundColor: color.withValues(alpha: 0.15),
-                  child: Text(
-                    '${widget.index + 1}',
-                    style: TextStyle(color: color),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    _capitalize(widget.exercise.name),
-                    style: theme.textTheme.titleSmall,
-                  ),
-                ),
-                IconButton(
-                  icon: Icon(
-                    _completed
-                        ? Icons.check_circle
-                        : Icons.check_circle_outline,
-                    color: _completed
-                        ? AppColors.success
-                        : theme.colorScheme.onSurfaceVariant,
-                  ),
-                  onPressed: () => setState(() => _completed = !_completed),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-
-            // Sets table
-            Table(
-              columnWidths: const {
-                0: FlexColumnWidth(1),
-                1: FlexColumnWidth(2),
-                2: FlexColumnWidth(2),
-              },
-              children: [
-                TableRow(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Text(
-                        'Set',
-                        style: theme.textTheme.labelSmall,
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Text(
-                        'Weight',
-                        style: theme.textTheme.labelSmall,
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Text(
-                        'Reps',
-                        style: theme.textTheme.labelSmall,
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  ],
-                ),
-                ..._sets.asMap().entries.map((entry) {
-                  final setIndex = entry.key;
-                  final setData = entry.value;
-                  final profile = context.watch<ProfileProvider>().profile;
-                  final unit = profile?.weightUnit ?? 'kg';
-
-                  return TableRow(
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 4),
-                        child: Text(
-                          '${setIndex + 1}',
-                          textAlign: TextAlign.center,
-                          style: theme.textTheme.bodyMedium,
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 4,
-                          vertical: 2,
-                        ),
-                        child: Column(
-                          children: [
-                            SizedBox(
-                              height: 36,
-                              child: Builder(
-                                builder: (context) {
-                                  final text = unit == 'lbs'
-                                      ? (setData.weightLbs > 0
-                                            ? setData.weightLbs.toStringAsFixed(
-                                                1,
-                                              )
-                                            : '')
-                                      : (setData.weightKg > 0
-                                            ? setData.weightKg.toStringAsFixed(
-                                                1,
-                                              )
-                                            : '');
-                                  return TextField(
-                                    controller:
-                                        TextEditingController(text: text)
-                                          ..selection =
-                                              TextSelection.fromPosition(
-                                                TextPosition(
-                                                  offset: text.length,
-                                                ),
-                                              ),
-                                    keyboardType:
-                                        const TextInputType.numberWithOptions(
-                                          decimal: true,
-                                        ),
-                                    textAlign: TextAlign.center,
-                                    style: theme.textTheme.bodyMedium,
-                                    decoration: InputDecoration(
-                                      hintText: unit,
-                                      contentPadding:
-                                          const EdgeInsets.symmetric(
-                                            horizontal: 8,
-                                            vertical: 4,
-                                          ),
-                                      border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                    ),
-                                    onChanged: (v) {
-                                      final val = double.tryParse(v) ?? 0;
-                                      double lbs, kg;
-                                      if (unit == 'lbs') {
-                                        lbs = val;
-                                        kg = val / 2.20462;
-                                      } else {
-                                        kg = val;
-                                        lbs = val * 2.20462;
-                                      }
-                                      setState(() {
-                                        _sets[setIndex] = WorkoutSet(
-                                          weightLbs: lbs,
-                                          weightKg: kg,
-                                          reps: setData.reps,
-                                        );
-                                      });
-                                      widget.onChanged(_sets);
-                                    },
-                                  );
-                                },
-                              ),
-                            ),
-                            Text(
-                              unit == 'lbs'
-                                  ? '${setData.weightKg.toStringAsFixed(1)} kg'
-                                  : '${setData.weightLbs.toStringAsFixed(1)} lbs',
-                              style: theme.textTheme.labelSmall?.copyWith(
-                                fontSize: 9,
-                                color: theme.colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 4,
-                          vertical: 2,
-                        ),
-                        child: SizedBox(
-                          height: 36,
-                          child: Builder(
-                            builder: (context) {
-                              final text = setData.reps > 0
-                                  ? setData.reps.toString()
-                                  : '';
-                              return TextField(
-                                controller: TextEditingController(text: text)
-                                  ..selection = TextSelection.fromPosition(
-                                    TextPosition(offset: text.length),
-                                  ),
-                                keyboardType: TextInputType.number,
-                                textAlign: TextAlign.center,
-                                style: theme.textTheme.bodyMedium,
-                                decoration: InputDecoration(
-                                  contentPadding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 4,
-                                  ),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                ),
-                                onChanged: (v) {
-                                  final val = int.tryParse(v) ?? 0;
-                                  setState(() {
-                                    _sets[setIndex] = WorkoutSet(
-                                      weightLbs: setData.weightLbs,
-                                      weightKg: setData.weightKg,
-                                      reps: val,
-                                    );
-                                  });
-                                  widget.onChanged(_sets);
-                                },
-                              );
-                            },
-                          ),
-                        ),
-                      ),
-                    ],
-                  );
-                }),
-              ],
-            ),
-
-            const SizedBox(height: 8),
-            TextButton.icon(
-              onPressed: () {
-                setState(
-                  () =>
-                      _sets.add(WorkoutSet(weightLbs: 0, weightKg: 0, reps: 0)),
-                );
-                widget.onChanged(_sets);
-              },
-              icon: const Icon(Icons.add, size: 16),
-              label: const Text('Add Set'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  String _capitalize(String text) {
-    if (text.isEmpty) return text;
-    return text[0].toUpperCase() + text.substring(1);
   }
 }

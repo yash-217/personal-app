@@ -1,15 +1,15 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../models/user_profile.dart';
-import '../../models/body_metrics.dart';
+
 import '../../providers/profile_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../services/inbody_ocr_service.dart';
-import '../../widgets/confirm_dialog.dart';
+import 'widgets/profile_setup.dart';
+import 'widgets/body_metrics_section.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -21,7 +21,9 @@ class ProfileScreen extends StatelessWidget {
     final profile = provider.profile;
 
     if (profile == null) {
-      return _buildSetupScreen(context, theme);
+      return ProfileSetup(
+        onCreateProfile: () => _showEditProfileDialog(context, null),
+      );
     }
 
     return Scaffold(
@@ -155,7 +157,7 @@ class ProfileScreen extends StatelessWidget {
               const SizedBox(height: 12),
 
               // Body Metrics section
-              _buildBodyMetricsSection(context, theme, provider),
+              const BodyMetricsSection(),
             ],
           ),
         ),
@@ -163,561 +165,6 @@ class ProfileScreen extends StatelessWidget {
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showAddMetricsDialog(context, provider),
         child: const Icon(Icons.add),
-      ),
-    );
-  }
-
-  Widget _buildSetupScreen(BuildContext context, ThemeData theme) {
-    return Scaffold(
-      body: SafeArea(
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(32),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.person_add,
-                  size: 80,
-                  color: theme.colorScheme.primary,
-                ),
-                const SizedBox(height: 24),
-                Text(
-                  'Welcome to FitPrint!',
-                  style: theme.textTheme.headlineMedium,
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Set up your profile to get started.',
-                  style: theme.textTheme.bodyMedium,
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 32),
-                FilledButton.icon(
-                  onPressed: () => _showEditProfileDialog(context, null),
-                  icon: const Icon(Icons.person_add),
-                  label: const Text('Create Profile'),
-                  style: FilledButton.styleFrom(
-                    minimumSize: const Size.fromHeight(52),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBodyMetricsSection(
-    BuildContext context,
-    ThemeData theme,
-    ProfileProvider provider,
-  ) {
-    final metrics = provider.bodyMetrics;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Body Metrics', style: theme.textTheme.titleMedium),
-        const SizedBox(height: 12),
-
-        if (metrics.isEmpty)
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                children: [
-                  Icon(
-                    Icons.monitor_weight,
-                    size: 48,
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'No body measurements yet',
-                    style: theme.textTheme.bodyMedium,
-                  ),
-                  Text(
-                    'Tap + to add your first measurement',
-                    style: theme.textTheme.bodySmall,
-                  ),
-                ],
-              ),
-            ),
-          )
-        else ...[
-          // Trend charts (separate)
-          if (metrics.length > 1) _buildSeparateTrendCharts(theme, metrics),
-
-          const SizedBox(height: 8),
-
-          // Latest metrics with deltas
-          if (provider.latestMetrics != null)
-            _buildLatestMetrics(
-              theme,
-              provider.latestMetrics!,
-              metrics.length > 1 ? metrics[metrics.length - 2] : null,
-            ),
-
-          const SizedBox(height: 24),
-
-          // History
-          _buildHistoryList(theme, metrics),
-        ],
-      ],
-    ).animate().fadeIn(delay: 300.ms);
-  }
-
-  Widget _buildSeparateTrendCharts(ThemeData theme, List<BodyMetrics> metrics) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Trends', style: theme.textTheme.titleMedium),
-        const SizedBox(height: 12),
-        // Weight Chart
-        _buildSingleTrendChart(
-          theme,
-          title: 'Weight',
-          unit: 'kg',
-          color: theme.colorScheme.primary,
-          data: metrics.map((m) => m.weight).toList(),
-          isDashed: false,
-        ),
-        const SizedBox(height: 12),
-        // Body Fat % Chart
-        if (metrics.any((m) => m.bodyFatPercentage > 0))
-          _buildSingleTrendChart(
-            theme,
-            title: 'Body Fat',
-            unit: '%',
-            color: Colors.orange,
-            data: metrics.map((m) => m.bodyFatPercentage).toList(),
-            isDashed: true,
-          ),
-        const SizedBox(height: 12),
-        // Protein Chart
-        if (metrics.any((m) => m.protein > 0))
-          _buildSingleTrendChart(
-            theme,
-            title: 'Protein',
-            unit: 'kg',
-            color: Colors.blue,
-            data: metrics.map((m) => m.protein).toList(),
-            isDashed: false,
-            isCurved: false, // Dotted/Straight style
-          ),
-      ],
-    );
-  }
-
-  Widget _buildSingleTrendChart(
-    ThemeData theme, {
-    required String title,
-    required String unit,
-    required Color color,
-    required List<double> data,
-    bool isDashed = false,
-    bool isCurved = true,
-  }) {
-    final validData = data.where((v) => v > 0).toList();
-    if (validData.length < 2) return const SizedBox.shrink();
-
-    final spots = validData
-        .asMap()
-        .entries
-        .map((e) => FlSpot(e.key.toDouble(), e.value))
-        .toList();
-    final maxY = validData.reduce((curr, next) => curr > next ? curr : next);
-    final minY = validData.reduce((curr, next) => curr < next ? curr : next);
-    final interval = (maxY - minY) == 0 ? 1.0 : (maxY - minY) / 4;
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('$title ($unit)', style: theme.textTheme.titleSmall),
-            const SizedBox(height: 16),
-            SizedBox(
-              height: 150,
-              child: LineChart(
-                LineChartData(
-                  gridData: FlGridData(
-                    show: true,
-                    drawVerticalLine: false,
-                    horizontalInterval: interval > 0 ? interval : 1,
-                    getDrawingHorizontalLine: (value) => FlLine(
-                      color: theme.dividerColor.withValues(alpha: 0.1),
-                      strokeWidth: 1,
-                    ),
-                  ),
-                  titlesData: FlTitlesData(
-                    show: true,
-                    rightTitles: const AxisTitles(
-                      sideTitles: SideTitles(showTitles: false),
-                    ),
-                    topTitles: const AxisTitles(
-                      sideTitles: SideTitles(showTitles: false),
-                    ),
-                    bottomTitles: const AxisTitles(
-                      sideTitles: SideTitles(showTitles: false),
-                    ),
-                    leftTitles: AxisTitles(
-                      sideTitles: SideTitles(
-                        showTitles: true,
-                        reservedSize: 40,
-                        getTitlesWidget: (value, meta) {
-                          if (value == minY || value == maxY) {
-                            return SideTitleWidget(
-                              meta: meta,
-                              child: Text(
-                                value.toStringAsFixed(1),
-                                style: theme.textTheme.labelSmall,
-                              ),
-                            );
-                          }
-                          return const SizedBox.shrink();
-                        },
-                      ),
-                    ),
-                  ),
-                  borderData: FlBorderData(show: false),
-                  lineTouchData: LineTouchData(
-                    touchTooltipData: LineTouchTooltipData(
-                      getTooltipColor: (_) => theme.colorScheme.surface,
-                      getTooltipItems: (touchedSpots) {
-                        return touchedSpots.map((spot) {
-                          return LineTooltipItem(
-                            '${spot.y.toStringAsFixed(1)} $unit',
-                            theme.textTheme.labelSmall!.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: color,
-                            ),
-                          );
-                        }).toList();
-                      },
-                    ),
-                  ),
-                  lineBarsData: [
-                    LineChartBarData(
-                      spots: spots,
-                      isCurved: isCurved,
-                      color: color,
-                      barWidth: 3,
-                      isStrokeCapRound: true,
-                      dotData: const FlDotData(show: true),
-                      dashArray: isDashed ? [5, 5] : null,
-                      belowBarData: BarAreaData(
-                        show: true,
-                        color: color.withValues(alpha: 0.1),
-                      ),
-                    ),
-                  ],
-                  minY: minY * 0.95,
-                  maxY: maxY * 1.05,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHistoryList(ThemeData theme, List<BodyMetrics> metrics) {
-    // Reverse sort for display (newest first)
-    final sorted = List<BodyMetrics>.from(metrics).reversed.toList();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('History', style: theme.textTheme.titleMedium),
-        const SizedBox(height: 12),
-        ListView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: sorted.length,
-          itemBuilder: (context, index) {
-            final item = sorted[index];
-            final nextItem = index + 1 < sorted.length
-                ? sorted[index + 1]
-                : null;
-
-            return Card(
-              margin: const EdgeInsets.only(bottom: 8),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          '${item.date.day}/${item.date.month}/${item.date.year}',
-                          style: theme.textTheme.titleSmall,
-                        ),
-                        if (item.recommendedCalorieIntake > 0)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: theme.colorScheme.primaryContainer,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(
-                              '${item.recommendedCalorieIntake.toStringAsFixed(0)} kcal',
-                              style: theme.textTheme.labelSmall?.copyWith(
-                                color: theme.colorScheme.onPrimaryContainer,
-                              ),
-                            ),
-                          ),
-                        const Spacer(),
-                        IconButton(
-                          icon: const Icon(Icons.delete_outline, size: 20),
-                          onPressed: () async {
-                            final confirm = await ConfirmDialog.show(
-                              context,
-                              title: 'Delete Measurement',
-                              message:
-                                  'Are you sure you want to delete this record?',
-                            );
-                            if (confirm && context.mounted) {
-                              context.read<ProfileProvider>().deleteBodyMetrics(
-                                item.id,
-                              );
-                            }
-                          },
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        _buildHistoryItem(
-                          theme,
-                          'Weight',
-                          '${item.weight} kg',
-                          item.weight,
-                          nextItem?.weight,
-                          lowerIsBetter: true,
-                        ),
-                        if (item.bodyFatPercentage > 0)
-                          _buildHistoryItem(
-                            theme,
-                            'Body Fat',
-                            '${item.bodyFatPercentage}%',
-                            item.bodyFatPercentage,
-                            nextItem?.bodyFatPercentage,
-                            lowerIsBetter: true,
-                          ),
-                        if (item.protein > 0)
-                          _buildHistoryItem(
-                            theme,
-                            'Protein',
-                            '${item.protein} kg',
-                            item.protein,
-                            nextItem?.protein,
-                            lowerIsBetter: false,
-                          ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        ),
-      ],
-    );
-  }
-
-  Widget _buildHistoryItem(
-    ThemeData theme,
-    String label,
-    String value,
-    double current,
-    double? prev, {
-    required bool lowerIsBetter,
-  }) {
-    final hasDelta = prev != null && prev > 0 && current != prev;
-    final delta = hasDelta ? current - prev : 0.0;
-    final isImproving = lowerIsBetter ? delta < 0 : delta > 0;
-    final deltaColor = isImproving ? Colors.green : Colors.red;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: theme.textTheme.labelSmall),
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(value, style: theme.textTheme.bodyMedium),
-            if (hasDelta) ...[
-              const SizedBox(width: 4),
-              Icon(
-                delta > 0 ? Icons.arrow_upward : Icons.arrow_downward,
-                size: 12,
-                color: deltaColor,
-              ),
-              Text(
-                delta.abs().toStringAsFixed(1),
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: deltaColor,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 10,
-                ),
-              ),
-            ],
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildLatestMetrics(
-    ThemeData theme,
-    BodyMetrics latest,
-    BodyMetrics? previous,
-  ) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('Latest Measurement', style: theme.textTheme.titleSmall),
-                Text(
-                  '${latest.date.day}/${latest.date.month}/${latest.date.year}',
-                  style: theme.textTheme.labelSmall,
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                _metricChipWithDelta(
-                  theme,
-                  'Weight',
-                  '${latest.weight} kg',
-                  latest.weight,
-                  previous?.weight,
-                  lowerIsBetter: true,
-                ),
-                if (latest.bodyFatPercentage > 0)
-                  _metricChipWithDelta(
-                    theme,
-                    'Body Fat',
-                    '${latest.bodyFatPercentage}%',
-                    latest.bodyFatPercentage,
-                    previous?.bodyFatPercentage,
-                    lowerIsBetter: true,
-                  ),
-
-                if (latest.basalMetabolicRate > 0)
-                  _metricChipWithDelta(
-                    theme,
-                    'BMR',
-                    '${latest.basalMetabolicRate.toStringAsFixed(0)} kcal',
-                    latest.basalMetabolicRate,
-                    previous?.basalMetabolicRate,
-                    lowerIsBetter: false,
-                  ),
-                if (latest.visceralFatLevel > 0)
-                  _metricChipWithDelta(
-                    theme,
-                    'Visceral Fat',
-                    '${latest.visceralFatLevel}',
-                    latest.visceralFatLevel,
-                    previous?.visceralFatLevel,
-                    lowerIsBetter: true,
-                  ),
-                if (latest.totalBodyWater > 0)
-                  _metricChipWithDelta(
-                    theme,
-                    'TBW',
-                    '${latest.totalBodyWater} L',
-                    latest.totalBodyWater,
-                    previous?.totalBodyWater,
-                    lowerIsBetter: false,
-                  ),
-                if (latest.bodyFatMass > 0)
-                  _metricChipWithDelta(
-                    theme,
-                    'Fat Mass',
-                    '${latest.bodyFatMass} kg',
-                    latest.bodyFatMass,
-                    previous?.bodyFatMass,
-                    lowerIsBetter: true,
-                  ),
-                if (latest.protein > 0)
-                  _metricChipWithDelta(
-                    theme,
-                    'Protein',
-                    '${latest.protein} kg',
-                    latest.protein,
-                    previous?.protein,
-                    lowerIsBetter: false,
-                  ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _metricChipWithDelta(
-    ThemeData theme,
-    String label,
-    String value,
-    double current,
-    double? prev, {
-    required bool lowerIsBetter,
-  }) {
-    final hasDelta = prev != null && prev > 0 && current != prev;
-    final delta = hasDelta ? current - prev : 0.0;
-    final isImproving = lowerIsBetter ? delta < 0 : delta > 0;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        children: [
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                value,
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              if (hasDelta) ...[
-                const SizedBox(width: 4),
-                Icon(
-                  delta > 0 ? Icons.arrow_upward : Icons.arrow_downward,
-                  size: 14,
-                  color: isImproving ? Colors.green : Colors.red,
-                ),
-              ],
-            ],
-          ),
-          Text(label, style: theme.textTheme.labelSmall),
-        ],
       ),
     );
   }
@@ -800,21 +247,42 @@ class ProfileScreen extends StatelessWidget {
                                 prefixIcon: Icon(Icons.cake),
                               ),
                               child: Text(
-                                selectedBirthDate == null
-                                    ? 'Select Date'
-                                    : '${selectedBirthDate!.day}/${selectedBirthDate!.month}/${selectedBirthDate!.year}',
+                                selectedBirthDate != null
+                                    ? '${selectedBirthDate!.day}/${selectedBirthDate!.month}/${selectedBirthDate!.year}'
+                                    : 'Select Date',
+                                style: selectedBirthDate != null
+                                    ? Theme.of(ctx).textTheme.bodyMedium
+                                    : Theme.of(
+                                        ctx,
+                                      ).textTheme.bodyMedium?.copyWith(
+                                        color: Theme.of(ctx).hintColor,
+                                      ),
                               ),
                             ),
                           ),
                         ),
                         const SizedBox(width: 12),
-                        Expanded(
-                          child: TextField(
-                            controller: heightCtrl,
-                            keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(
-                              labelText: 'Height (cm)',
-                              prefixIcon: Icon(Icons.height),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Theme.of(ctx).hintColor),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              value: unit,
+                              items: const [
+                                DropdownMenuItem(
+                                  value: 'kg',
+                                  child: Text('kg'),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'lbs',
+                                  child: Text('lbs'),
+                                ),
+                              ],
+                              onChanged: (val) =>
+                                  setModalState(() => unit = val!),
                             ),
                           ),
                         ),
@@ -825,81 +293,67 @@ class ProfileScreen extends StatelessWidget {
                       children: [
                         Expanded(
                           child: TextField(
-                            controller: weightCtrl,
-                            keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true,
-                            ),
+                            controller: heightCtrl,
+                            keyboardType: TextInputType.number,
                             decoration: const InputDecoration(
-                              labelText: 'Weight (kg)',
-                              prefixIcon: Icon(Icons.monitor_weight_outlined),
+                              labelText: 'Height (cm)',
+                              prefixIcon: Icon(Icons.height),
                             ),
                           ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
                           child: TextField(
-                            controller: goalCtrl,
+                            controller: weightCtrl,
                             keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(
-                              labelText: 'Weekly Goal',
-                              prefixIcon: Icon(Icons.calendar_today),
+                            decoration: InputDecoration(
+                              labelText: 'Weight ($unit)',
+                              prefixIcon: const Icon(Icons.monitor_weight),
                             ),
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Preferred Weight Unit',
-                      style: Theme.of(ctx).textTheme.labelLarge,
-                    ),
-                    const SizedBox(height: 8),
-                    SegmentedButton<String>(
-                      segments: const [
-                        ButtonSegment(value: 'kg', label: Text('KG')),
-                        ButtonSegment(value: 'lbs', label: Text('LBS')),
-                      ],
-                      selected: {unit},
-                      onSelectionChanged: (newSelection) {
-                        setModalState(() => unit = newSelection.first);
-                      },
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: goalCtrl,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Weekly Gym Goal (days)',
+                        prefixIcon: Icon(Icons.flag),
+                      ),
                     ),
                     const SizedBox(height: 24),
                     FilledButton(
                       onPressed: () {
-                        final name = nameCtrl.text.trim();
-                        if (name.isEmpty) return;
-
-                        // Always store weight in kg internally
-                        double weightKg =
-                            double.tryParse(weightCtrl.text) ?? 70;
-
-                        // Calculate age for legacy field
-                        int calculatedAge = existing?.age ?? 25;
-                        if (selectedBirthDate != null) {
-                          final now = DateTime.now();
-                          calculatedAge = now.year - selectedBirthDate!.year;
-                          if (now.month < selectedBirthDate!.month ||
-                              (now.month == selectedBirthDate!.month &&
-                                  now.day < selectedBirthDate!.day)) {
-                            calculatedAge--;
-                          }
+                        if (nameCtrl.text.isEmpty ||
+                            heightCtrl.text.isEmpty ||
+                            weightCtrl.text.isEmpty ||
+                            selectedBirthDate == null) {
+                          return;
                         }
 
-                        final profile = UserProfile(
-                          name: name,
-                          age: calculatedAge,
-                          height: double.tryParse(heightCtrl.text) ?? 170,
-                          weight: weightKg,
-                          gender: 'male',
-                          weeklyGoal: int.tryParse(goalCtrl.text) ?? 4,
+                        final height = double.tryParse(heightCtrl.text) ?? 0;
+                        var weight = double.tryParse(weightCtrl.text) ?? 0;
+                        final goal = int.tryParse(goalCtrl.text) ?? 4;
+
+                        // Convert weight to kg if entered in lbs
+                        if (unit == 'lbs') {
+                          weight = weight / 2.20462;
+                        }
+
+                        context.read<ProfileProvider>().updateProfile(
+                          name: nameCtrl.text,
+                          height: height,
+                          weight: weight,
+                          birthDate: selectedBirthDate!,
+                          weeklyGoal: goal,
                           weightUnit: unit,
-                          birthDate: selectedBirthDate,
                         );
-                        context.read<ProfileProvider>().saveProfile(profile);
-                        Navigator.of(ctx).pop();
+
+                        Navigator.pop(ctx);
                       },
-                      child: const Text('Save'),
+                      child: const Text('Save Profile'),
                     ),
                   ],
                 ),
@@ -912,534 +366,269 @@ class ProfileScreen extends StatelessWidget {
   }
 
   void _showAddMetricsDialog(BuildContext context, ProfileProvider provider) {
+    final weightCtrl = TextEditingController();
+    final bodyFatCtrl = TextEditingController();
+    final proteinCtrl = TextEditingController();
+    final bmrCtrl = TextEditingController();
+    final visceralCtrl = TextEditingController();
+    final tbwCtrl = TextEditingController();
+    final fatMassCtrl = TextEditingController();
+    final muscleMassCtrl = TextEditingController();
+
+    // InBody OCR Service
+    final ocrService = InBodyOcrService();
+    bool isScanning = false;
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      useSafeArea: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
       builder: (ctx) {
-        return _AddMetricsSheet(provider: provider);
-      },
-    );
-  }
-}
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final theme = Theme.of(context);
 
-// --- Modern Add Metrics Bottom Sheet ---
-class _AddMetricsSheet extends StatefulWidget {
-  final ProfileProvider provider;
+            // Function to handle image picking and OCR
+            Future<void> pickAndScanImage(ImageSource source) async {
+              setModalState(() => isScanning = true);
+              try {
+                final picker = ImagePicker();
+                final picked = await picker.pickImage(source: source);
 
-  const _AddMetricsSheet({required this.provider});
+                if (picked != null) {
+                  final file = File(picked.path);
+                  final result = await ocrService.processImage(file);
 
-  @override
-  State<_AddMetricsSheet> createState() => _AddMetricsSheetState();
-}
+                  if (result != null) {
+                    // Populate fields with extracted data
+                    if (result.weight != null) {
+                      weightCtrl.text = result.weight.toString();
+                    }
+                    if (result.bodyFatPercentage != null) {
+                      bodyFatCtrl.text = result.bodyFatPercentage.toString();
+                    }
+                    // SMM removed
+                    if (result.basalMetabolicRate != null) {
+                      bmrCtrl.text = result.basalMetabolicRate.toString();
+                    }
+                    if (result.visceralFatLevel != null) {
+                      visceralCtrl.text = result.visceralFatLevel.toString();
+                    }
+                    if (result.protein != null) {
+                      proteinCtrl.text = result.protein.toString();
+                    }
+                    if (result.totalBodyWater != null) {
+                      tbwCtrl.text = result.totalBodyWater.toString();
+                    }
+                    if (result.bodyFatMass != null) {
+                      fatMassCtrl.text = result.bodyFatMass.toString();
+                    }
 
-class _AddMetricsSheetState extends State<_AddMetricsSheet> {
-  final _weightCtrl = TextEditingController();
-  final _bfCtrl = TextEditingController();
-  final _bmrCtrl = TextEditingController();
-  final _bmiCtrl = TextEditingController();
-  final _bfMassCtrl = TextEditingController();
-  final _tbwCtrl = TextEditingController();
-  final _proteinCtrl = TextEditingController();
-  final _mineralsCtrl = TextEditingController();
-  final _visceralCtrl = TextEditingController();
-  final _whrCtrl = TextEditingController();
-  final _calorieCtrl = TextEditingController();
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Scanned successfully! Verify values before saving.',
+                          ),
+                        ),
+                      );
+                    }
+                  } else {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Could not extract data. Please enter manually.',
+                          ),
+                        ),
+                      );
+                    }
+                  }
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text('Error scanning: $e')));
+                }
+              } finally {
+                setModalState(() => isScanning = false);
+              }
+            }
 
-  final _ocrService = InBodyOcrService();
-  bool _isProcessing = false;
-  DateTime? _ocrTestDate;
-  File? _selectedImage;
-  bool _showSecondary = false;
-
-  @override
-  void dispose() {
-    _weightCtrl.dispose();
-    _bfCtrl.dispose();
-    _bmrCtrl.dispose();
-    _bmiCtrl.dispose();
-    _bfMassCtrl.dispose();
-    _tbwCtrl.dispose();
-    _proteinCtrl.dispose();
-    _mineralsCtrl.dispose();
-    _visceralCtrl.dispose();
-    _whrCtrl.dispose();
-    _calorieCtrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _importFromInBody() async {
-    final picker = ImagePicker();
-    final picked = await picker.pickImage(source: ImageSource.gallery);
-    if (picked == null) return;
-
-    setState(() {
-      _selectedImage = File(picked.path);
-      _isProcessing = true;
-      _ocrTestDate = null;
-    });
-
-    final result = await _ocrService.processImage(File(picked.path));
-
-    if (result != null && mounted) {
-      setState(() {
-        if (result.weight != null) {
-          _weightCtrl.text = result.weight!.toStringAsFixed(1);
-        }
-        if (result.bodyFatPercentage != null) {
-          _bfCtrl.text = result.bodyFatPercentage!.toStringAsFixed(1);
-        }
-        if (result.basalMetabolicRate != null) {
-          _bmrCtrl.text = result.basalMetabolicRate!.toStringAsFixed(0);
-        }
-        if (result.bmi != null) {
-          _bmiCtrl.text = result.bmi!.toStringAsFixed(1);
-        }
-        if (result.bodyFatMass != null) {
-          _bfMassCtrl.text = result.bodyFatMass!.toStringAsFixed(1);
-        }
-        if (result.totalBodyWater != null) {
-          _tbwCtrl.text = result.totalBodyWater!.toStringAsFixed(1);
-        }
-        if (result.protein != null) {
-          _proteinCtrl.text = result.protein!.toStringAsFixed(1);
-        }
-        if (result.minerals != null) {
-          _mineralsCtrl.text = result.minerals!.toStringAsFixed(2);
-        }
-        if (result.visceralFatLevel != null) {
-          _visceralCtrl.text = result.visceralFatLevel!.toStringAsFixed(0);
-        }
-        if (result.waistHipRatio != null) {
-          _whrCtrl.text = result.waistHipRatio!.toStringAsFixed(2);
-        }
-        if (result.recommendedCalorieIntake != null) {
-          _calorieCtrl.text = result.recommendedCalorieIntake!.toStringAsFixed(
-            0,
-          );
-        }
-        // Store test date from OCR for saving
-        if (result.testDate != null) {
-          _ocrTestDate = result.testDate;
-        }
-        // Show secondary fields if OCR found them
-        if (result.bmi != null ||
-            result.bodyFatMass != null ||
-            result.totalBodyWater != null) {
-          _showSecondary = true;
-        }
-      });
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('✅ InBody data extracted successfully'),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-          ),
-        );
-      }
-    } else if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Could not extract data. Try a clearer image.'),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-        ),
-      );
-    }
-
-    setState(() => _isProcessing = false);
-  }
-
-  void _save() {
-    final weight = double.tryParse(_weightCtrl.text);
-    if (weight == null || weight <= 0) return;
-    widget.provider.addBodyMetrics(
-      weight: weight,
-      bodyFatPercentage: double.tryParse(_bfCtrl.text) ?? 0,
-      basalMetabolicRate: double.tryParse(_bmrCtrl.text) ?? 0,
-      bmi: double.tryParse(_bmiCtrl.text) ?? 0,
-      bodyFatMass: double.tryParse(_bfMassCtrl.text) ?? 0,
-      totalBodyWater: double.tryParse(_tbwCtrl.text) ?? 0,
-      protein: double.tryParse(_proteinCtrl.text) ?? 0,
-      minerals: double.tryParse(_mineralsCtrl.text) ?? 0,
-      visceralFatLevel: double.tryParse(_visceralCtrl.text) ?? 0,
-      waistHipRatio: double.tryParse(_whrCtrl.text) ?? 0,
-      recommendedCalorieIntake: double.tryParse(_calorieCtrl.text) ?? 0,
-      date: _ocrTestDate,
-    );
-    Navigator.of(context).pop();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Padding(
-      padding: EdgeInsets.fromLTRB(
-        0,
-        0,
-        0,
-        MediaQuery.of(context).viewInsets.bottom,
-      ),
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Drag handle
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                margin: const EdgeInsets.only(top: 12, bottom: 8),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.onSurfaceVariant.withValues(
-                    alpha: 0.3,
-                  ),
-                  borderRadius: BorderRadius.circular(2),
-                ),
+            return Padding(
+              padding: EdgeInsets.fromLTRB(
+                24,
+                24,
+                24,
+                MediaQuery.of(ctx).viewInsets.bottom + 24,
               ),
-            ),
-
-            // Header
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.primary.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(
-                      Icons.monitor_weight_outlined,
-                      color: theme.colorScheme.primary,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          'Add Body Measurement',
+                          'Add Measurements',
                           style: theme.textTheme.titleLarge,
                         ),
-                        Text(
-                          'Record or import your stats',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
+                        if (isScanning)
+                          const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        else
+                          PopupMenuButton<ImageSource>(
+                            icon: const Icon(Icons.camera_alt),
+                            tooltip: 'Scan InBody Sheet',
+                            onSelected: pickAndScanImage,
+                            itemBuilder: (context) => [
+                              const PopupMenuItem(
+                                value: ImageSource.camera,
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.camera),
+                                    SizedBox(width: 8),
+                                    Text('Take Photo'),
+                                  ],
+                                ),
+                              ),
+                              const PopupMenuItem(
+                                value: ImageSource.gallery,
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.photo_library),
+                                    SizedBox(width: 8),
+                                    Text('Choose from Gallery'),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
                       ],
                     ),
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            // Import from InBody button
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: OutlinedButton.icon(
-                onPressed: _isProcessing ? null : _importFromInBody,
-                icon: _isProcessing
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.camera_alt_outlined),
-                label: Text(_isProcessing ? 'Processing...' : 'Import'),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  side: BorderSide(
-                    color: theme.colorScheme.primary.withValues(alpha: 0.5),
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                ),
-              ),
-            ),
-
-            if (_selectedImage != null) ...[
-              const SizedBox(height: 12),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Image.file(
-                    _selectedImage!,
-                    height: 120,
-                    width: double.infinity,
-                    fit: BoxFit.cover,
-                  ),
-                ),
-              ),
-            ],
-
-            const SizedBox(height: 20),
-
-            // Primary Metrics
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Card(
-                margin: EdgeInsets.zero,
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Primary Metrics',
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          color: theme.colorScheme.primary,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      _buildModernField(
-                        controller: _weightCtrl,
-                        label: 'Weight',
-                        suffix: 'kg',
-                        icon: Icons.monitor_weight_outlined,
-                        autofocus: true,
-                      ),
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _buildModernField(
-                              controller: _bfCtrl,
-                              label: 'Body Fat',
-                              suffix: '%',
-                              icon: Icons.pie_chart_outline,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: _buildModernField(
-                              controller: _bmiCtrl,
-                              label: 'BMI',
-                              icon: Icons.speed_outlined,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _buildModernField(
-                              controller: _bmrCtrl,
-                              label: 'BMR',
-                              suffix: 'kcal',
-                              icon: Icons.local_fire_department_outlined,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: _buildModernField(
-                              controller: _visceralCtrl,
-                              label: 'Visceral Fat',
-                              suffix: 'lvl',
-                              icon: Icons.warning_amber_outlined,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 12),
-
-            // Secondary metrics toggle
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: TextButton.icon(
-                onPressed: () =>
-                    setState(() => _showSecondary = !_showSecondary),
-                icon: Icon(
-                  _showSecondary ? Icons.expand_less : Icons.expand_more,
-                  size: 20,
-                ),
-                label: Text(
-                  _showSecondary
-                      ? 'Hide Additional Metrics'
-                      : 'Show Additional Metrics',
-                ),
-              ),
-            ),
-
-            if (_showSecondary) ...[
-              const SizedBox(height: 4),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Card(
-                  margin: EdgeInsets.zero,
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    const SizedBox(height: 16),
+                    Row(
                       children: [
-                        Text(
-                          'Additional Metrics',
-                          style: theme.textTheme.titleSmall?.copyWith(
-                            color: theme.colorScheme.secondary,
-                            fontWeight: FontWeight.w600,
+                        Expanded(
+                          child: TextField(
+                            controller: weightCtrl,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              labelText: 'Weight (kg)',
+                            ),
                           ),
                         ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _buildModernField(
-                                controller: _bfMassCtrl,
-                                label: 'Fat Mass',
-                                suffix: 'kg',
-                                icon: Icons.scale_outlined,
-                              ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextField(
+                            controller: bodyFatCtrl,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              labelText: 'Body Fat (%)',
                             ),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _buildModernField(
-                                controller: _tbwCtrl,
-                                label: 'Total Body Water',
-                                suffix: 'L',
-                                icon: Icons.water_drop_outlined,
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: _buildModernField(
-                                controller: _proteinCtrl,
-                                label: 'Protein',
-                                suffix: 'kg',
-                                icon: Icons.egg_outlined,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _buildModernField(
-                                controller: _mineralsCtrl,
-                                label: 'Minerals',
-                                suffix: 'kg',
-                                icon: Icons.diamond_outlined,
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: _buildModernField(
-                                controller: _whrCtrl,
-                                label: 'Waist-Hip',
-                                suffix: 'ratio',
-                                icon: Icons.straighten_outlined,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
-                        _buildModernField(
-                          controller: _calorieCtrl,
-                          label: 'Recommended Calories',
-                          suffix: 'kcal',
-                          icon: Icons.local_fire_department_outlined,
+                          ),
                         ),
                       ],
                     ),
-                  ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: muscleMassCtrl,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Skeletal Muscle Mass (kg)',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: proteinCtrl,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              labelText: 'Protein (kg)',
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextField(
+                            controller: bmrCtrl,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              labelText: 'BMR (kcal)',
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: visceralCtrl,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              labelText: 'Visceral Fat',
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextField(
+                            controller: tbwCtrl,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              labelText: 'TBW (L)',
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: fatMassCtrl,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Body Fat Mass (kg)',
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    FilledButton(
+                      onPressed: () {
+                        final weight = double.tryParse(weightCtrl.text);
+                        if (weight == null) return;
+
+                        provider.addBodyMetrics(
+                          weight: weight,
+                          bodyFatPercentage:
+                              double.tryParse(bodyFatCtrl.text) ?? 0,
+                          // SMM removed
+                          basalMetabolicRate:
+                              double.tryParse(bmrCtrl.text) ?? 0,
+                          visceralFatLevel:
+                              double.tryParse(visceralCtrl.text) ?? 0,
+                          protein: double.tryParse(proteinCtrl.text) ?? 0,
+                          totalBodyWater: double.tryParse(tbwCtrl.text) ?? 0,
+                          bodyFatMass: double.tryParse(fatMassCtrl.text) ?? 0,
+                        );
+
+                        Navigator.pop(ctx);
+                      },
+                      child: const Text('Save Measurements'),
+                    ),
+                  ],
                 ),
               ),
-            ],
-
-            const SizedBox(height: 20),
-
-            // Save button
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-              child: FilledButton.icon(
-                onPressed: _save,
-                icon: const Icon(Icons.check),
-                label: const Text('Save Measurement'),
-                style: FilledButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildModernField({
-    required TextEditingController controller,
-    required String label,
-    String? suffix,
-    required IconData icon,
-    bool autofocus = false,
-  }) {
-    final theme = Theme.of(context);
-    return TextField(
-      controller: controller,
-      autofocus: autofocus,
-      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-      style: theme.textTheme.bodyMedium,
-      decoration: InputDecoration(
-        labelText: label,
-        suffixText: suffix,
-        prefixIcon: Icon(icon, size: 20),
-        filled: true,
-        fillColor: theme.colorScheme.surfaceContainerHighest.withValues(
-          alpha: 0.3,
-        ),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(
-            color: theme.colorScheme.outline.withValues(alpha: 0.2),
-          ),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: theme.colorScheme.primary, width: 1.5),
-        ),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: 12,
-        ),
-        isDense: true,
-      ),
+            );
+          },
+        );
+      },
     );
   }
 }
