@@ -30,7 +30,10 @@ class ExerciseDetailScreen extends StatelessWidget {
     final color = AppColors.getBodyPartColor(exercise.bodyPart);
 
     return Scaffold(
-      appBar: AppBar(title: Text(_capitalize(exercise.name))),
+      appBar: AppBar(
+        title: Text(_capitalize(exercise.name)),
+        centerTitle: true,
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showAddWeightDialog(context, provider),
         child: const Icon(Icons.add),

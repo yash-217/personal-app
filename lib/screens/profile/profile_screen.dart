@@ -182,7 +182,11 @@ class ProfileScreen extends StatelessWidget {
       text: existing?.height.toStringAsFixed(0) ?? '',
     );
     final weightCtrl = TextEditingController(
-      text: existing?.weight.toStringAsFixed(1) ?? '',
+      text: existing != null
+          ? (existing.weight % 1 == 0
+                ? existing.weight.toInt().toString()
+                : existing.weight.toString())
+          : '',
     );
     final goalCtrl = TextEditingController(
       text: (existing?.weeklyGoal ?? 4).toString(),
@@ -306,9 +310,9 @@ class ProfileScreen extends StatelessWidget {
                           child: TextField(
                             controller: weightCtrl,
                             keyboardType: TextInputType.number,
-                            decoration: InputDecoration(
-                              labelText: 'Weight ($unit)',
-                              prefixIcon: const Icon(Icons.monitor_weight),
+                            decoration: const InputDecoration(
+                              labelText: 'Weight (kg)',
+                              prefixIcon: Icon(Icons.monitor_weight),
                             ),
                           ),
                         ),
@@ -334,13 +338,8 @@ class ProfileScreen extends StatelessWidget {
                         }
 
                         final height = double.tryParse(heightCtrl.text) ?? 0;
-                        var weight = double.tryParse(weightCtrl.text) ?? 0;
+                        final weight = double.tryParse(weightCtrl.text) ?? 0;
                         final goal = int.tryParse(goalCtrl.text) ?? 4;
-
-                        // Convert weight to kg if entered in lbs
-                        if (unit == 'lbs') {
-                          weight = weight / 2.20462;
-                        }
 
                         context.read<ProfileProvider>().updateProfile(
                           name: nameCtrl.text,
@@ -368,12 +367,12 @@ class ProfileScreen extends StatelessWidget {
   void _showAddMetricsDialog(BuildContext context, ProfileProvider provider) {
     final weightCtrl = TextEditingController();
     final bodyFatCtrl = TextEditingController();
+    final recommendedCaloriesCtrl = TextEditingController();
     final proteinCtrl = TextEditingController();
     final bmrCtrl = TextEditingController();
     final visceralCtrl = TextEditingController();
     final tbwCtrl = TextEditingController();
     final fatMassCtrl = TextEditingController();
-    final muscleMassCtrl = TextEditingController();
 
     // InBody OCR Service
     final ocrService = InBodyOcrService();
@@ -406,7 +405,12 @@ class ProfileScreen extends StatelessWidget {
                     if (result.bodyFatPercentage != null) {
                       bodyFatCtrl.text = result.bodyFatPercentage.toString();
                     }
-                    // SMM removed
+                    if (result.recommendedCalorieIntake != null) {
+                      recommendedCaloriesCtrl.text = result
+                          .recommendedCalorieIntake!
+                          .toInt()
+                          .toString();
+                    }
                     if (result.basalMetabolicRate != null) {
                       bmrCtrl.text = result.basalMetabolicRate.toString();
                     }
@@ -511,6 +515,16 @@ class ProfileScreen extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 16),
+
+                    // Primary Metrics
+                    Text(
+                      'Primary Metrics',
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        color: theme.colorScheme.primary,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
                     Row(
                       children: [
                         Expanded(
@@ -519,6 +533,7 @@ class ProfileScreen extends StatelessWidget {
                             keyboardType: TextInputType.number,
                             decoration: const InputDecoration(
                               labelText: 'Weight (kg)',
+                              isDense: true,
                             ),
                           ),
                         ),
@@ -529,6 +544,7 @@ class ProfileScreen extends StatelessWidget {
                             keyboardType: TextInputType.number,
                             decoration: const InputDecoration(
                               labelText: 'Body Fat (%)',
+                              isDense: true,
                             ),
                           ),
                         ),
@@ -536,68 +552,93 @@ class ProfileScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
                     TextField(
-                      controller: muscleMassCtrl,
+                      controller: recommendedCaloriesCtrl,
                       keyboardType: TextInputType.number,
                       decoration: const InputDecoration(
-                        labelText: 'Skeletal Muscle Mass (kg)',
+                        labelText: 'Recommended Daily Calories (kcal)',
+                        isDense: true,
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: proteinCtrl,
-                            keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(
-                              labelText: 'Protein (kg)',
-                            ),
+
+                    const SizedBox(height: 16),
+                    Theme(
+                      data: theme.copyWith(dividerColor: Colors.transparent),
+                      child: ExpansionTile(
+                        title: Text(
+                          'Additional Metrics',
+                          style: theme.textTheme.labelLarge?.copyWith(
+                            color: theme.colorScheme.secondary,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: TextField(
-                            controller: bmrCtrl,
+                        tilePadding: EdgeInsets.zero,
+                        childrenPadding: EdgeInsets.zero,
+                        children: [
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: TextField(
+                                  controller: bmrCtrl,
+                                  keyboardType: TextInputType.number,
+                                  decoration: const InputDecoration(
+                                    labelText: 'BMR (kcal)',
+                                    isDense: true,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: TextField(
+                                  controller: visceralCtrl,
+                                  keyboardType: TextInputType.number,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Visceral Fat',
+                                    isDense: true,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: TextField(
+                                  controller: proteinCtrl,
+                                  keyboardType: TextInputType.number,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Protein (kg)',
+                                    isDense: true,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: TextField(
+                                  controller: tbwCtrl,
+                                  keyboardType: TextInputType.number,
+                                  decoration: const InputDecoration(
+                                    labelText: 'TBW (L)',
+                                    isDense: true,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          TextField(
+                            controller: fatMassCtrl,
                             keyboardType: TextInputType.number,
                             decoration: const InputDecoration(
-                              labelText: 'BMR (kcal)',
+                              labelText: 'Body Fat Mass (kg)',
+                              isDense: true,
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: visceralCtrl,
-                            keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(
-                              labelText: 'Visceral Fat',
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: TextField(
-                            controller: tbwCtrl,
-                            keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(
-                              labelText: 'TBW (L)',
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: fatMassCtrl,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'Body Fat Mass (kg)',
+                        ],
                       ),
                     ),
+
                     const SizedBox(height: 24),
                     FilledButton(
                       onPressed: () {
@@ -608,7 +649,9 @@ class ProfileScreen extends StatelessWidget {
                           weight: weight,
                           bodyFatPercentage:
                               double.tryParse(bodyFatCtrl.text) ?? 0,
-                          // SMM removed
+                          recommendedCalorieIntake:
+                              double.tryParse(recommendedCaloriesCtrl.text) ??
+                              0,
                           basalMetabolicRate:
                               double.tryParse(bmrCtrl.text) ?? 0,
                           visceralFatLevel:

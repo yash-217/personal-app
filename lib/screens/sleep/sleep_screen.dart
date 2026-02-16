@@ -13,7 +13,7 @@ class SleepScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Sleep Tracker')),
+      appBar: AppBar(title: const Text('Sleep Tracker'), centerTitle: false),
       body: Consumer<SleepProvider>(
         builder: (context, provider, _) {
           if (provider.logs.isEmpty) {

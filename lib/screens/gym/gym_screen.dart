@@ -143,8 +143,17 @@ class GymScreen extends StatelessWidget {
                       style: theme.textTheme.labelSmall,
                     ),
                     onTap: () {
-                      // Could navigate to details or repeat
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              WorkoutSessionScreen(existingSession: session),
+                        ),
+                      );
                     },
+                    trailing: Icon(
+                      Icons.chevron_right,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
                   );
                 },
                 childCount: workoutProvider.sessions.length > 5

@@ -93,12 +93,15 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(_stepTitle),
-        leading: _step > 0
-            ? IconButton(
-                icon: const Icon(Icons.arrow_back),
-                onPressed: () => setState(() => _step--),
-              )
-            : null,
+        centerTitle: true,
+        leading: widget.existingSession != null
+            ? const BackButton()
+            : (_step > 0
+                  ? IconButton(
+                      icon: const Icon(Icons.arrow_back),
+                      onPressed: () => setState(() => _step--),
+                    )
+                  : null),
       ),
       body: AnimatedSwitcher(
         duration: const Duration(milliseconds: 300),

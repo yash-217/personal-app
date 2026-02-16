@@ -100,6 +100,7 @@ class _RoutineCreatorScreenState extends State<RoutineCreatorScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(_step == 0 ? 'New Routine' : 'Add Exercises'),
+        centerTitle: true,
         actions: [
           if (_step == 1)
             TextButton(onPressed: _saveRoutine, child: const Text('Save')),

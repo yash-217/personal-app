@@ -10,6 +10,7 @@ import 'widgets/dashboard_stats_row.dart';
 import 'widgets/weekly_progress_card.dart';
 import 'widgets/activity_stats_card.dart';
 import 'widgets/dashboard_fab.dart';
+import '../workout/workout_session_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -188,6 +189,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       builder: (ctx) {
         return StatefulBuilder(
           builder: (ctx, setSheetState) {
+            final theme = Theme.of(ctx);
             final currentLog = workout.getDayLogForDate(day);
             if (currentLog == null || currentLog.activities.isEmpty) {
               Navigator.of(ctx).pop();
@@ -205,16 +207,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       height: 4,
                       margin: const EdgeInsets.only(bottom: 16),
                       decoration: BoxDecoration(
-                        color: Theme.of(
-                          ctx,
-                        ).colorScheme.onSurfaceVariant.withValues(alpha: 0.3),
+                        color: theme.colorScheme.onSurfaceVariant.withValues(
+                          alpha: 0.3,
+                        ),
                         borderRadius: BorderRadius.circular(2),
                       ),
                     ),
                   ),
                   Text(
                     '${day.day}/${day.month}/${day.year}',
-                    style: Theme.of(ctx).textTheme.headlineMedium,
+                    style: theme.textTheme.headlineMedium,
                   ),
                   const SizedBox(height: 16),
                   ...currentLog.activities.map((type) {
@@ -249,15 +251,55 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                       title: Text(label),
                       contentPadding: EdgeInsets.zero,
-                      trailing: IconButton(
-                        icon: Icon(
-                          Icons.delete_outline,
-                          color: Theme.of(ctx).colorScheme.error,
-                        ),
-                        onPressed: () async {
-                          await workout.toggleActivity(day, type);
-                          setSheetState(() {});
-                        },
+                      onTap: type == ActivityType.gym
+                          ? () {
+                              final session = workout.getSessionForDate(day);
+                              if (session != null) {
+                                Navigator.of(ctx).pop(); // Close sheet
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => WorkoutSessionScreen(
+                                      existingSession: session,
+                                    ),
+                                  ),
+                                );
+                              }
+                            }
+                          : null,
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (type == ActivityType.gym)
+                            IconButton(
+                              icon: Icon(
+                                Icons.edit_outlined,
+                                color: theme.colorScheme.primary,
+                              ),
+                              onPressed: () {
+                                final session = workout.getSessionForDate(day);
+                                if (session != null) {
+                                  Navigator.of(ctx).pop();
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => WorkoutSessionScreen(
+                                        existingSession: session,
+                                      ),
+                                    ),
+                                  );
+                                }
+                              },
+                            ),
+                          IconButton(
+                            icon: Icon(
+                              Icons.delete_outline,
+                              color: theme.colorScheme.error,
+                            ),
+                            onPressed: () async {
+                              await workout.removeActivity(day, type);
+                              setSheetState(() {});
+                            },
+                          ),
+                        ],
                       ),
                     );
                   }),

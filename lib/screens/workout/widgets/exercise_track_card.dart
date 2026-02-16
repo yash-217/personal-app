@@ -152,14 +152,19 @@ class _ExerciseTrackCardState extends State<ExerciseTrackCard> {
                                 builder: (context) {
                                   final text = unit == 'lbs'
                                       ? (setData.weightLbs > 0
-                                            ? setData.weightLbs.toStringAsFixed(
-                                                1,
-                                              )
+                                            ? (setData.weightLbs % 1 == 0
+                                                  ? setData.weightLbs
+                                                        .toInt()
+                                                        .toString()
+                                                  : setData.weightLbs
+                                                        .toString())
                                             : '')
                                       : (setData.weightKg > 0
-                                            ? setData.weightKg.toStringAsFixed(
-                                                1,
-                                              )
+                                            ? (setData.weightKg % 1 == 0
+                                                  ? setData.weightKg
+                                                        .toInt()
+                                                        .toString()
+                                                  : setData.weightKg.toString())
                                             : '');
                                   return TextField(
                                     controller:
