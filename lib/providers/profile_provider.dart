@@ -16,7 +16,13 @@ class ProfileProvider extends ChangeNotifier {
   }
 
   // --- Getters ---
-  UserProfile? get profile => _profile;
+  UserProfile? get profile {
+    if (_profile == null) return null;
+    if (_bodyMetrics.isEmpty) return _profile;
+    // Always return profile with the weight from the latest metrics log
+    return _profile!.copyWith(weight: _bodyMetrics.last.weight);
+  }
+
   List<BodyMetrics> get bodyMetrics => _bodyMetrics;
   BodyMetrics? get latestMetrics =>
       _bodyMetrics.isNotEmpty ? _bodyMetrics.last : null;
@@ -101,17 +107,19 @@ class ProfileProvider extends ChangeNotifier {
     await _storage.saveBodyMetrics(metrics);
     _bodyMetrics = _storage.getAllBodyMetrics();
 
-    // Auto-update profile weight
-    if (_profile != null) {
-      await updateProfile(weight: weight);
-    }
+    notifyListeners();
+  }
 
+  Future<void> updateBodyMetrics(BodyMetrics metrics) async {
+    await _storage.saveBodyMetrics(metrics);
+    _bodyMetrics = _storage.getAllBodyMetrics();
     notifyListeners();
   }
 
   Future<void> deleteBodyMetrics(String id) async {
     await _storage.deleteBodyMetrics(id);
     _bodyMetrics = _storage.getAllBodyMetrics();
+
     notifyListeners();
   }
 }

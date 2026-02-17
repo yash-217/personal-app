@@ -10,6 +10,7 @@ dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: any
+  flutter_slidable: ^3.0.0
 
   # State management
   provider: any

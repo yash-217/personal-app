@@ -163,7 +163,8 @@ class StorageService {
   }
 
   Future<void> deleteBodyMetrics(String id) async {
-    await bodyMetricsBox.delete(id);
+    final metric = bodyMetricsBox.values.firstWhere((m) => m.id == id);
+    await metric.delete();
   }
 
   // --- Settings ---

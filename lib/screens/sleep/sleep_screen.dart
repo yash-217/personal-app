@@ -149,49 +149,85 @@ class SleepScreen extends StatelessWidget {
   }
 
   Widget _buildWeeklyChart(BuildContext context, SleepProvider provider) {
-    final weeklyData = provider.weeklySleepDuration;
-    // We expect up to 7 values. Padded with 0 if fewer.
+    final windows = provider.weeklySleepWindows;
+    final theme = Theme.of(context);
+
+    final bounds = provider.sleepChartBounds;
+    // Invert the chart: earlier times (lower numbers) at the top, later times at bottom.
+    // In fl_chart, Y increases upwards, so we use negative values to reverse.
+    final minY = -bounds.maxY;
+    final maxY = -bounds.minY;
 
     return Container(
-      height: 200,
+      height: 250,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Theme.of(context).cardTheme.color,
+        color: theme.cardTheme.color,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Theme.of(context).dividerColor.withValues(alpha: 0.1),
-        ),
+        border: Border.all(color: theme.dividerColor.withValues(alpha: 0.1)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Last 7 Days (Hours)',
-            style: Theme.of(context).textTheme.titleMedium,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Last 7 Days', style: theme.textTheme.titleMedium),
+              const Icon(Icons.show_chart, size: 16, color: AppColors.seed),
+            ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 24),
           Expanded(
             child: BarChart(
               BarChartData(
                 alignment: BarChartAlignment.spaceAround,
-                maxY: 12, // Cap chart at 12 hours visually
-                barTouchData: BarTouchData(enabled: false),
+                minY: minY,
+                maxY: maxY,
+                barTouchData: BarTouchData(
+                  touchTooltipData: BarTouchTooltipData(
+                    getTooltipColor: (_) => theme.colorScheme.surfaceContainer,
+                    getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                      final from = rod.fromY.abs();
+                      final to = rod.toY.abs();
+                      // In our inverted chart, fromY is bedtime, toY is wakeTime
+                      final startH = from.toInt() % 24;
+                      final startM = ((from - from.toInt()) * 60).toInt();
+                      final endH = to.toInt() % 24;
+                      final endM = ((to - to.toInt()) * 60).toInt();
+                      return BarTooltipItem(
+                        '${startH.toString().padLeft(2, '0')}:${startM.toString().padLeft(2, '0')} - '
+                        '${endH.toString().padLeft(2, '0')}:${endM.toString().padLeft(2, '0')}',
+                        theme.textTheme.labelSmall!.copyWith(
+                          color: theme.colorScheme.onSurface,
+                        ),
+                      );
+                    },
+                  ),
+                ),
                 titlesData: FlTitlesData(
                   show: true,
-                  bottomTitles: AxisTitles(
+                  bottomTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
+                  leftTitles: AxisTitles(
                     sideTitles: SideTitles(
                       showTitles: true,
+                      reservedSize: 40,
+                      interval: 2,
                       getTitlesWidget: (value, meta) {
-                        // Just show index 0-6 or M/T/W etc?
-                        // Since provider.weeklySleepDuration doesn't give dates, stick to generic or maybe just day indices.
-                        // Ideally provider should return pairs (Date, duration).
-                        // Create a map in provider?
-                        return const SizedBox.shrink();
+                        if (value > maxY || value < minY) {
+                          return const SizedBox.shrink();
+                        }
+                        final hour = value.abs().toInt() % 24;
+                        return Text(
+                          '${hour.toString().padLeft(2, '0')}:00',
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            fontSize: 9,
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        );
                       },
                     ),
-                  ),
-                  leftTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
                   ),
                   topTitles: const AxisTitles(
                     sideTitles: SideTitles(showTitles: false),
@@ -200,27 +236,42 @@ class SleepScreen extends StatelessWidget {
                     sideTitles: SideTitles(showTitles: false),
                   ),
                 ),
-                gridData: const FlGridData(show: false),
+                gridData: FlGridData(
+                  show: true,
+                  drawVerticalLine: false,
+                  horizontalInterval: 2,
+                  getDrawingHorizontalLine: (value) => FlLine(
+                    color: theme.dividerColor.withValues(alpha: 0.05),
+                    strokeWidth: 1,
+                  ),
+                ),
                 borderData: FlBorderData(show: false),
-                barGroups: weeklyData.asMap().entries.map((e) {
-                  final index = e.key;
-                  final value = e.value;
+                extraLinesData: ExtraLinesData(
+                  horizontalLines: [
+                    HorizontalLine(
+                      y: -provider.avgBedtime,
+                      color: Colors.red.withValues(alpha: 0.5),
+                      strokeWidth: 1,
+                      dashArray: [5, 5],
+                    ),
+                    HorizontalLine(
+                      y: -provider.avgWakeTime,
+                      color: Colors.green.withValues(alpha: 0.5),
+                      strokeWidth: 1,
+                      dashArray: [5, 5],
+                    ),
+                  ],
+                ),
+                barGroups: windows.asMap().entries.map((e) {
                   return BarChartGroupData(
-                    x: index,
+                    x: e.key,
                     barRods: [
                       BarChartRodData(
-                        toY: value,
+                        fromY: -e.value.from,
+                        toY: -e.value.to,
                         color: AppColors.seed,
-                        width: 12,
+                        width: 14,
                         borderRadius: BorderRadius.circular(4),
-                        backDrawRodData: BackgroundBarChartRodData(
-                          show: true,
-                          toY: 12, // Max hours background
-                          color: Theme.of(context)
-                              .colorScheme
-                              .surfaceContainerHighest
-                              .withValues(alpha: 0.3),
-                        ),
                       ),
                     ],
                   );

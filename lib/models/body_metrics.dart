@@ -60,4 +60,37 @@ class BodyMetrics extends HiveObject {
   });
 
   double get fatFreeMass => weight - bodyFatMass;
+
+  BodyMetrics copyWith({
+    String? id,
+    DateTime? date,
+    double? weight,
+    double? bodyFatPercentage,
+    double? bmi,
+    double? bodyFatMass,
+    double? totalBodyWater,
+    double? protein,
+    double? minerals,
+    double? visceralFatLevel,
+    double? basalMetabolicRate,
+    double? waistHipRatio,
+    double? recommendedCalorieIntake,
+  }) {
+    return BodyMetrics(
+      id: id ?? this.id,
+      date: date ?? this.date,
+      weight: weight ?? this.weight,
+      bodyFatPercentage: bodyFatPercentage ?? this.bodyFatPercentage,
+      bmi: bmi ?? this.bmi,
+      bodyFatMass: bodyFatMass ?? this.bodyFatMass,
+      totalBodyWater: totalBodyWater ?? this.totalBodyWater,
+      protein: protein ?? this.protein,
+      minerals: minerals ?? this.minerals,
+      visceralFatLevel: visceralFatLevel ?? this.visceralFatLevel,
+      basalMetabolicRate: basalMetabolicRate ?? this.basalMetabolicRate,
+      waistHipRatio: waistHipRatio ?? this.waistHipRatio,
+      recommendedCalorieIntake:
+          recommendedCalorieIntake ?? this.recommendedCalorieIntake,
+    );
+  }
 }

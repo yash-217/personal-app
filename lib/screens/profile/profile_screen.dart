@@ -4,12 +4,13 @@ import 'package:provider/provider.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../models/user_profile.dart';
+import '../../models/body_metrics.dart';
 
 import '../../providers/profile_provider.dart';
-import '../../providers/theme_provider.dart';
 import '../../services/inbody_ocr_service.dart';
 import 'widgets/profile_setup.dart';
 import 'widgets/body_metrics_section.dart';
+import 'profile_detail_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -34,130 +35,67 @@ class ProfileScreen extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               // Header
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text('Profile', style: theme.textTheme.headlineMedium),
-                  Row(
-                    children: [
-                      Consumer<ThemeProvider>(
-                        builder: (_, themeProvider, _) => IconButton(
-                          icon: Icon(
-                            themeProvider.isDarkMode
-                                ? Icons.light_mode
-                                : Icons.dark_mode,
-                          ),
-                          onPressed: () => themeProvider.toggleTheme(),
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.edit),
-                        onPressed: () =>
-                            _showEditProfileDialog(context, profile),
-                      ),
-                    ],
-                  ),
-                ],
+              Text(
+                'Profile',
+                style: theme.textTheme.headlineMedium,
               ).animate().fadeIn(),
 
               const SizedBox(height: 16),
 
               // Profile card
               Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 36,
-                        backgroundColor: theme.colorScheme.primary,
-                        child: Text(
-                          profile.name.isNotEmpty
-                              ? profile.name[0].toUpperCase()
-                              : '?',
-                          style: theme.textTheme.headlineLarge?.copyWith(
-                            color: theme.colorScheme.onPrimary,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const ProfileDetailScreen(),
+                      ),
+                    );
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 36,
+                          backgroundColor: theme.colorScheme.primary,
+                          child: Text(
+                            profile.name.isNotEmpty
+                                ? profile.name[0].toUpperCase()
+                                : '?',
+                            style: theme.textTheme.headlineLarge?.copyWith(
+                              color: theme.colorScheme.onPrimary,
+                            ),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              profile.name,
-                              style: theme.textTheme.headlineSmall,
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              profile.weightUnit == 'lbs'
-                                  ? '${profile.calculatedAge}y · ${profile.height.toStringAsFixed(0)}cm · ${(profile.weight * 2.20462).toStringAsFixed(1)}lbs (${profile.weight.toStringAsFixed(1)}kg)'
-                                  : '${profile.calculatedAge}y · ${profile.height.toStringAsFixed(0)}cm · ${profile.weight.toStringAsFixed(1)}kg (${(profile.weight * 2.20462).toStringAsFixed(1)}lbs)',
-                              style: theme.textTheme.bodyMedium,
-                            ),
-                            Text(
-                              'Weekly goal: ${profile.weeklyGoal} gym days',
-                              style: theme.textTheme.bodySmall,
-                            ),
-                          ],
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                profile.name,
+                                style: theme.textTheme.headlineSmall,
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
+                        Icon(
+                          Icons.chevron_right,
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ).animate().fadeIn(delay: 100.ms),
 
-              const SizedBox(height: 12),
-
-              // BMI card
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('BMI', style: theme.textTheme.titleMedium),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Text(
-                            profile.bmi.toStringAsFixed(1),
-                            style: theme.textTheme.displayMedium?.copyWith(
-                              color: _bmiColor(profile.bmi),
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: _bmiColor(
-                                profile.bmi,
-                              ).withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Text(
-                              profile.bmiCategory,
-                              style: theme.textTheme.labelMedium?.copyWith(
-                                color: _bmiColor(profile.bmi),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ).animate().fadeIn(delay: 200.ms),
-
-              const SizedBox(height: 12),
-
               // Body Metrics section
-              const BodyMetricsSection(),
+              BodyMetricsSection(
+                onEdit: (metrics) =>
+                    _showAddMetricsDialog(context, provider, existing: metrics),
+              ),
             ],
           ),
         ),
@@ -167,13 +105,6 @@ class ProfileScreen extends StatelessWidget {
         child: const Icon(Icons.add),
       ),
     );
-  }
-
-  Color _bmiColor(double bmi) {
-    if (bmi < 18.5) return Colors.blue;
-    if (bmi < 25) return Colors.green;
-    if (bmi < 30) return Colors.orange;
-    return Colors.red;
   }
 
   void _showEditProfileDialog(BuildContext context, UserProfile? existing) {
@@ -364,15 +295,49 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 
-  void _showAddMetricsDialog(BuildContext context, ProfileProvider provider) {
-    final weightCtrl = TextEditingController();
-    final bodyFatCtrl = TextEditingController();
-    final recommendedCaloriesCtrl = TextEditingController();
-    final proteinCtrl = TextEditingController();
-    final bmrCtrl = TextEditingController();
-    final visceralCtrl = TextEditingController();
-    final tbwCtrl = TextEditingController();
-    final fatMassCtrl = TextEditingController();
+  void _showAddMetricsDialog(
+    BuildContext context,
+    ProfileProvider provider, {
+    BodyMetrics? existing,
+  }) {
+    final weightCtrl = TextEditingController(
+      text: existing?.weight.toString() ?? '',
+    );
+    final bodyFatCtrl = TextEditingController(
+      text: existing != null && existing.bodyFatPercentage > 0
+          ? existing.bodyFatPercentage.toString()
+          : '',
+    );
+    final recommendedCaloriesCtrl = TextEditingController(
+      text: existing != null && existing.recommendedCalorieIntake > 0
+          ? existing.recommendedCalorieIntake.toInt().toString()
+          : '',
+    );
+    final proteinCtrl = TextEditingController(
+      text: existing != null && existing.protein > 0
+          ? existing.protein.toString()
+          : '',
+    );
+    final bmrCtrl = TextEditingController(
+      text: existing != null && existing.basalMetabolicRate > 0
+          ? existing.basalMetabolicRate.toString()
+          : '',
+    );
+    final visceralCtrl = TextEditingController(
+      text: existing != null && existing.visceralFatLevel > 0
+          ? existing.visceralFatLevel.toString()
+          : '',
+    );
+    final tbwCtrl = TextEditingController(
+      text: existing != null && existing.totalBodyWater > 0
+          ? existing.totalBodyWater.toString()
+          : '',
+    );
+    final fatMassCtrl = TextEditingController(
+      text: existing != null && existing.bodyFatMass > 0
+          ? existing.bodyFatMass.toString()
+          : '',
+    );
 
     // InBody OCR Service
     final ocrService = InBodyOcrService();
@@ -475,7 +440,9 @@ class ProfileScreen extends StatelessWidget {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          'Add Measurements',
+                          existing == null
+                              ? 'Add Measurements'
+                              : 'Edit Measurements',
                           style: theme.textTheme.titleLarge,
                         ),
                         if (isScanning)
@@ -645,21 +612,45 @@ class ProfileScreen extends StatelessWidget {
                         final weight = double.tryParse(weightCtrl.text);
                         if (weight == null) return;
 
-                        provider.addBodyMetrics(
-                          weight: weight,
-                          bodyFatPercentage:
-                              double.tryParse(bodyFatCtrl.text) ?? 0,
-                          recommendedCalorieIntake:
-                              double.tryParse(recommendedCaloriesCtrl.text) ??
-                              0,
-                          basalMetabolicRate:
-                              double.tryParse(bmrCtrl.text) ?? 0,
-                          visceralFatLevel:
-                              double.tryParse(visceralCtrl.text) ?? 0,
-                          protein: double.tryParse(proteinCtrl.text) ?? 0,
-                          totalBodyWater: double.tryParse(tbwCtrl.text) ?? 0,
-                          bodyFatMass: double.tryParse(fatMassCtrl.text) ?? 0,
-                        );
+                        if (existing != null) {
+                          provider.updateBodyMetrics(
+                            existing.copyWith(
+                              weight: weight,
+                              bodyFatPercentage:
+                                  double.tryParse(bodyFatCtrl.text) ?? 0,
+                              recommendedCalorieIntake:
+                                  double.tryParse(
+                                    recommendedCaloriesCtrl.text,
+                                  ) ??
+                                  0,
+                              basalMetabolicRate:
+                                  double.tryParse(bmrCtrl.text) ?? 0,
+                              visceralFatLevel:
+                                  double.tryParse(visceralCtrl.text) ?? 0,
+                              protein: double.tryParse(proteinCtrl.text) ?? 0,
+                              totalBodyWater:
+                                  double.tryParse(tbwCtrl.text) ?? 0,
+                              bodyFatMass:
+                                  double.tryParse(fatMassCtrl.text) ?? 0,
+                            ),
+                          );
+                        } else {
+                          provider.addBodyMetrics(
+                            weight: weight,
+                            bodyFatPercentage:
+                                double.tryParse(bodyFatCtrl.text) ?? 0,
+                            recommendedCalorieIntake:
+                                double.tryParse(recommendedCaloriesCtrl.text) ??
+                                0,
+                            basalMetabolicRate:
+                                double.tryParse(bmrCtrl.text) ?? 0,
+                            visceralFatLevel:
+                                double.tryParse(visceralCtrl.text) ?? 0,
+                            protein: double.tryParse(proteinCtrl.text) ?? 0,
+                            totalBodyWater: double.tryParse(tbwCtrl.text) ?? 0,
+                            bodyFatMass: double.tryParse(fatMassCtrl.text) ?? 0,
+                          );
+                        }
 
                         Navigator.pop(ctx);
                       },

@@ -7,8 +7,11 @@ import 'body_metrics_trends.dart';
 import 'body_metrics_latest.dart';
 import 'body_metrics_history.dart';
 
+import '../../../models/body_metrics.dart';
+
 class BodyMetricsSection extends StatelessWidget {
-  const BodyMetricsSection({super.key});
+  final Function(BodyMetrics)? onEdit;
+  const BodyMetricsSection({super.key, this.onEdit});
 
   @override
   Widget build(BuildContext context) {
@@ -19,9 +22,6 @@ class BodyMetricsSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Body Metrics', style: theme.textTheme.titleMedium),
-        const SizedBox(height: 12),
-
         if (metrics.isEmpty)
           Card(
             child: Padding(
@@ -53,16 +53,16 @@ class BodyMetricsSection extends StatelessWidget {
           const SizedBox(height: 8),
 
           // Latest metrics with deltas
-          if (provider.latestMetrics != null)
+          if (metrics.isNotEmpty)
             BodyMetricsLatest(
-              latest: provider.latestMetrics!,
-              previous: metrics.length > 1 ? metrics[metrics.length - 2] : null,
+              metrics: metrics,
+              userHeight: provider.profile?.height ?? 0,
             ),
 
           const SizedBox(height: 24),
 
           // History
-          BodyMetricsHistory(metrics: metrics),
+          BodyMetricsHistory(metrics: metrics, onEdit: onEdit),
         ],
       ],
     ).animate().fadeIn(delay: 300.ms);
