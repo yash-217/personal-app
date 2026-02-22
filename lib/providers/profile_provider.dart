@@ -27,6 +27,7 @@ class ProfileProvider extends ChangeNotifier {
   BodyMetrics? get latestMetrics =>
       _bodyMetrics.isNotEmpty ? _bodyMetrics.last : null;
   bool get hasProfile => _profile != null;
+  StorageService get storage => _storage;
 
   void _loadData() {
     _profile = _storage.getProfile();

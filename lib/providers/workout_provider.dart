@@ -5,7 +5,10 @@ import '../models/workout_session.dart';
 import '../models/workout_routine.dart';
 import '../models/run_log.dart';
 import '../services/storage_service.dart';
+import '../services/notification_service.dart';
 import 'exercise_provider.dart';
+import 'sleep_provider.dart';
+import 'achievement_provider.dart';
 import '../models/exercise.dart';
 
 class WorkoutProvider extends ChangeNotifier {
@@ -17,8 +20,33 @@ class WorkoutProvider extends ChangeNotifier {
   List<RunLog> _runLogs = [];
   List<WorkoutRoutine> _routines = [];
 
+  SleepProvider? _sleepProvider;
+  AchievementProvider? _achievementProvider;
+
   WorkoutProvider(this._storage) {
     _loadData();
+  }
+
+  /// Set a reference to the SleepProvider for coordinated notification scheduling.
+  void setSleepProvider(SleepProvider provider) {
+    _sleepProvider = provider;
+  }
+
+  /// Set a reference to the AchievementProvider for badge evaluation.
+  void setAchievementProvider(AchievementProvider provider) {
+    _achievementProvider = provider;
+  }
+
+  void _rescheduleNotifications() {
+    NotificationService().rescheduleNotifications(
+      sleepLogs: _sleepProvider?.logs ?? [],
+      dayLogs: _dayLogs,
+    );
+    _achievementProvider?.evaluate(
+      dayLogs: _dayLogs,
+      sleepLogs: _sleepProvider?.logs ?? [],
+      runLogs: _runLogs,
+    );
   }
 
   // --- Getters ---
@@ -92,6 +120,7 @@ class WorkoutProvider extends ChangeNotifier {
       _dayLogs.add(log);
     }
     notifyListeners();
+    _rescheduleNotifications();
   }
 
   /// Remove a specific activity type from a day
@@ -182,6 +211,7 @@ class WorkoutProvider extends ChangeNotifier {
       _dayLogs.add(log);
     }
     notifyListeners();
+    _rescheduleNotifications();
   }
 
   Future<void> updateGymSession(
@@ -208,6 +238,7 @@ class WorkoutProvider extends ChangeNotifier {
     }
 
     notifyListeners();
+    _rescheduleNotifications();
   }
 
   /// Add a run log to a day
@@ -240,6 +271,7 @@ class WorkoutProvider extends ChangeNotifier {
       _dayLogs.add(log);
     }
     notifyListeners();
+    _rescheduleNotifications();
   }
 
   // --- Stats ---

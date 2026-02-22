@@ -58,6 +58,18 @@ class _ExerciseTrackCardState extends State<ExerciseTrackCard> {
           children: [
             Row(
               children: [
+                ReorderableDragStartListener(
+                  index: widget.index,
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: Icon(
+                      Icons.drag_indicator,
+                      color: theme.colorScheme.onSurfaceVariant.withValues(
+                        alpha: 0.5,
+                      ),
+                    ),
+                  ),
+                ),
                 CircleAvatar(
                   backgroundColor: color.withValues(alpha: 0.15),
                   child: Text(

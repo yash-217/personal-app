@@ -54,13 +54,10 @@ class _MainShellState extends State<MainShell> {
         bottomNavigationBar: NavigationBar(
           selectedIndex: _currentIndex,
           onDestinationSelected: (index) {
-            if (_currentIndex == index) {
-              _navigatorKeys[index].currentState?.popUntil(
-                (route) => route.isFirst,
-              );
-            } else {
-              setState(() => _currentIndex = index);
-            }
+            _navigatorKeys[index].currentState?.popUntil(
+              (route) => route.isFirst,
+            );
+            setState(() => _currentIndex = index);
           },
           destinations: const [
             NavigationDestination(

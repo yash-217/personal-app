@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import '../../models/exercise.dart';
 import '../../models/workout_routine.dart';
 import '../../models/workout_session.dart';
@@ -11,6 +10,7 @@ import '../../core/theme/app_colors.dart';
 import 'widgets/muscle_group_selector.dart';
 import 'widgets/exercise_selector.dart';
 import 'widgets/exercise_track_card.dart';
+import 'widgets/rest_timer_widget.dart';
 
 class WorkoutSessionScreen extends StatefulWidget {
   final List<String>? initialExercises;
@@ -32,6 +32,7 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
   final List<Exercise> _selectedExercises = [];
   WorkoutSession? _session;
   final Map<String, List<WorkoutSet>> _performanceData = {};
+  bool _showRestTimer = false;
 
   static const _muscleGroups = [
     'chest',
@@ -102,6 +103,19 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
                       onPressed: () => setState(() => _step--),
                     )
                   : null),
+        actions: [
+          if (_step == 2)
+            IconButton(
+              icon: Icon(
+                _showRestTimer ? Icons.timer_rounded : Icons.timer_outlined,
+                color: _showRestTimer
+                    ? Theme.of(context).colorScheme.primary
+                    : null,
+              ),
+              tooltip: 'Rest Timer',
+              onPressed: () => setState(() => _showRestTimer = !_showRestTimer),
+            ),
+        ],
       ),
       body: AnimatedSwitcher(
         duration: const Duration(milliseconds: 300),
@@ -174,13 +188,34 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
     return Column(
       key: const ValueKey('step2'),
       children: [
+        // Rest timer (collapsible)
+        if (_showRestTimer)
+          RestTimerWidget(
+            onDismiss: () => setState(() => _showRestTimer = false),
+          ),
         Expanded(
-          child: ListView.builder(
+          child: ReorderableListView.builder(
             padding: const EdgeInsets.all(16),
             itemCount: _selectedExercises.length,
+            buildDefaultDragHandles: false,
+            onReorder: (oldIndex, newIndex) {
+              setState(() {
+                if (newIndex > oldIndex) {
+                  newIndex -= 1;
+                }
+                final exercise = _selectedExercises.removeAt(oldIndex);
+                _selectedExercises.insert(newIndex, exercise);
+                if (_session != null) {
+                  _session = _session!.copyWith(
+                    exerciseIds: _selectedExercises.map((e) => e.id).toList(),
+                  );
+                }
+              });
+            },
             itemBuilder: (context, index) {
               final exercise = _selectedExercises[index];
               return ExerciseTrackCard(
+                key: ValueKey(exercise.id),
                 exercise: exercise,
                 index: index,
                 initialSets:
@@ -189,7 +224,7 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
                 onChanged: (sets) {
                   _performanceData[exercise.id] = sets;
                 },
-              ).animate().fadeIn(delay: (index * 80).ms);
+              );
             },
           ),
         ),

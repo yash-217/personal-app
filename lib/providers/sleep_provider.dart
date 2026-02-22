@@ -2,14 +2,42 @@ import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import '../models/sleep_log.dart';
 import '../services/storage_service.dart';
+import '../services/notification_service.dart';
+import '../providers/workout_provider.dart';
+import '../providers/achievement_provider.dart';
 
 class SleepProvider extends ChangeNotifier {
   static const _uuid = Uuid();
   final StorageService _storage;
   List<SleepLog> _logs = [];
 
+  WorkoutProvider? _workoutProvider;
+  AchievementProvider? _achievementProvider;
+
   SleepProvider(this._storage) {
     _loadData();
+  }
+
+  /// Set a reference to the WorkoutProvider for coordinated notification scheduling.
+  void setWorkoutProvider(WorkoutProvider provider) {
+    _workoutProvider = provider;
+  }
+
+  /// Set a reference to the AchievementProvider for badge evaluation.
+  void setAchievementProvider(AchievementProvider provider) {
+    _achievementProvider = provider;
+  }
+
+  void _rescheduleNotifications() {
+    NotificationService().rescheduleNotifications(
+      sleepLogs: _logs,
+      dayLogs: _workoutProvider?.dayLogs ?? [],
+    );
+    _achievementProvider?.evaluate(
+      dayLogs: _workoutProvider?.dayLogs ?? [],
+      sleepLogs: _logs,
+      runLogs: _workoutProvider?.runLogs ?? [],
+    );
   }
 
   List<SleepLog> get logs => _logs;
@@ -41,6 +69,7 @@ class SleepProvider extends ChangeNotifier {
     await _storage.saveSleepLog(log);
     _logs.insert(0, log);
     notifyListeners();
+    _rescheduleNotifications();
   }
 
   Future<void> updateLog(SleepLog log) async {
@@ -49,6 +78,7 @@ class SleepProvider extends ChangeNotifier {
     if (index >= 0) {
       _logs[index] = log;
       notifyListeners();
+      _rescheduleNotifications();
     }
   }
 
@@ -56,6 +86,7 @@ class SleepProvider extends ChangeNotifier {
     await _storage.deleteSleepLog(id);
     _logs.removeWhere((l) => l.id == id);
     notifyListeners();
+    _rescheduleNotifications();
   }
 
   // --- Stats ---

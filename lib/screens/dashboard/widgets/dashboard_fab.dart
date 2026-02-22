@@ -73,7 +73,7 @@ class _DashboardFabState extends State<DashboardFab>
                 child: child,
               );
             },
-            child: const Icon(Icons.add, size: 28),
+            child: const Icon(Icons.add_rounded),
           ),
         ),
       ],

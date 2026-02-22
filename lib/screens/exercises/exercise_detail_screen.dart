@@ -36,7 +36,7 @@ class ExerciseDetailScreen extends StatelessWidget {
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showAddWeightDialog(context, provider),
-        child: const Icon(Icons.add),
+        child: const Icon(Icons.add_rounded),
       ),
       body: SingleChildScrollView(
         child: Column(

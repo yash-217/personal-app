@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import '../../models/user_profile.dart';
 import '../../providers/profile_provider.dart';
 import '../../providers/theme_provider.dart';
+import '../../providers/auth_provider.dart';
+import '../../services/data_export_service.dart';
+import '../../services/cloud_sync_service.dart';
+import 'widgets/edit_profile_dialog.dart';
 
 class ProfileDetailScreen extends StatefulWidget {
   const ProfileDetailScreen({super.key});
@@ -30,7 +33,7 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.edit_outlined),
-            onPressed: () => _showEditProfileDialog(context, profile),
+            onPressed: () => showEditProfileDialog(context, profile),
           ),
         ],
       ),
@@ -39,34 +42,44 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Avatar and Name
+            // Avatar and Name — show Google photo if signed in
             Center(
-              child: Column(
-                children: [
-                  CircleAvatar(
-                    radius: 50,
-                    backgroundColor: theme.colorScheme.primary,
-                    child: Text(
-                      profile.name.isNotEmpty
-                          ? profile.name[0].toUpperCase()
-                          : '?',
-                      style: theme.textTheme.displayMedium?.copyWith(
-                        color: theme.colorScheme.onPrimary,
-                        fontWeight: FontWeight.bold,
+              child: Consumer<AuthProvider>(
+                builder: (_, authProvider, _) {
+                  final photoUrl = authProvider.photoUrl;
+                  return Column(
+                    children: [
+                      CircleAvatar(
+                        radius: 50,
+                        backgroundColor: theme.colorScheme.primary,
+                        backgroundImage: photoUrl != null
+                            ? NetworkImage(photoUrl)
+                            : null,
+                        child: photoUrl == null
+                            ? Text(
+                                profile.name.isNotEmpty
+                                    ? profile.name[0].toUpperCase()
+                                    : '?',
+                                style: theme.textTheme.displayMedium?.copyWith(
+                                  color: theme.colorScheme.onPrimary,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              )
+                            : null,
+                      ).animate().scale(
+                        duration: 400.ms,
+                        curve: Curves.easeOutBack,
                       ),
-                    ),
-                  ).animate().scale(
-                    duration: 400.ms,
-                    curve: Curves.easeOutBack,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    profile.name,
-                    style: theme.textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ).animate().fadeIn(delay: 200.ms),
-                ],
+                      const SizedBox(height: 16),
+                      Text(
+                        profile.name,
+                        style: theme.textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ).animate().fadeIn(delay: 200.ms),
+                    ],
+                  );
+                },
               ),
             ),
 
@@ -154,10 +167,253 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
                 ),
               ),
             ]),
+
+            const SizedBox(height: 24),
+
+            // Cloud Sync Section
+            _buildSectionHeader(theme, 'Cloud Sync'),
+            Consumer<AuthProvider>(
+              builder: (_, authProvider, _) {
+                if (authProvider.isLoading) {
+                  return _buildInfoCard(theme, [
+                    const Padding(
+                      padding: EdgeInsets.all(24),
+                      child: Center(child: CircularProgressIndicator()),
+                    ),
+                  ]);
+                }
+
+                if (!authProvider.isSignedIn) {
+                  return _buildInfoCard(theme, [
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.login_rounded),
+                      title: const Text('Sign in with Google'),
+                      subtitle: const Text('Sync your data across devices'),
+                      onTap: () async {
+                        final user = await authProvider.signInWithGoogle();
+                        if (user != null && context.mounted) {
+                          // Update profile name from Google if the current one is generic
+                          final profileProvider = context
+                              .read<ProfileProvider>();
+                          final currentProfile = profileProvider.profile;
+                          if (currentProfile != null &&
+                              user.displayName != null &&
+                              user.displayName!.isNotEmpty) {
+                            profileProvider.updateProfile(
+                              name: user.displayName!,
+                              height: currentProfile.height,
+                              weight: currentProfile.weight,
+                              birthDate: currentProfile.birthDate,
+                              weeklyGoal: currentProfile.weeklyGoal,
+                              weightUnit: currentProfile.weightUnit,
+                            );
+                          }
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  'Signed in as ${user.displayName ?? user.email}',
+                                ),
+                              ),
+                            );
+                          }
+                        }
+                        if (authProvider.error != null && context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                'Sign-in failed: ${authProvider.error}',
+                              ),
+                            ),
+                          );
+                        }
+                      },
+                    ),
+                  ]);
+                }
+
+                // Signed in — show user info & sync options
+                return _buildInfoCard(theme, [
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: CircleAvatar(
+                      radius: 18,
+                      backgroundImage: authProvider.photoUrl != null
+                          ? NetworkImage(authProvider.photoUrl!)
+                          : null,
+                      child: authProvider.photoUrl == null
+                          ? const Icon(Icons.person, size: 18)
+                          : null,
+                    ),
+                    title: Text(authProvider.displayName ?? 'Google User'),
+                    subtitle: Text(authProvider.email ?? ''),
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.cloud_upload_rounded),
+                    title: const Text('Backup to Cloud'),
+                    subtitle: const Text('Upload all data to Firebase'),
+                    onTap: () => _performBackup(context),
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.cloud_download_rounded),
+                    title: const Text('Restore from Cloud'),
+                    subtitle: const Text('Check cloud for available backup'),
+                    onTap: () => _peekCloudData(context),
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(
+                      Icons.logout_rounded,
+                      color: theme.colorScheme.error,
+                    ),
+                    title: Text(
+                      'Sign Out',
+                      style: TextStyle(color: theme.colorScheme.error),
+                    ),
+                    onTap: () async {
+                      await authProvider.signOut();
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Signed out')),
+                        );
+                      }
+                    },
+                  ),
+                ]);
+              },
+            ),
+
+            const SizedBox(height: 24),
+
+            _buildSectionHeader(theme, 'Data'),
+            _buildInfoCard(theme, [
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.upload_file_rounded),
+                title: const Text('Export Data'),
+                subtitle: const Text('Save all data as JSON'),
+                onTap: () async {
+                  try {
+                    final storage = context.read<ProfileProvider>().storage;
+                    final exportService = DataExportService(storage);
+                    await exportService.exportAndShare();
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Export failed: $e')),
+                      );
+                    }
+                  }
+                },
+              ),
+              const Divider(height: 1),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.download_rounded),
+                title: const Text('Import Data'),
+                subtitle: const Text('Restore from JSON backup'),
+                onTap: () async {
+                  try {
+                    final storage = context.read<ProfileProvider>().storage;
+                    final exportService = DataExportService(storage);
+                    final counts = await exportService.importFromFile();
+                    if (counts != null && context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            'Found: ${counts.entries.where((e) => e.value > 0).map((e) => '${e.value} ${e.key}').join(', ')}',
+                          ),
+                        ),
+                      );
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Import failed: $e')),
+                      );
+                    }
+                  }
+                },
+              ),
+            ]),
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _performBackup(BuildContext context) async {
+    try {
+      final storage = context.read<ProfileProvider>().storage;
+      final syncService = CloudSyncService(storage);
+
+      // Show loading
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Backing up...')));
+      }
+
+      final counts = await syncService.backup();
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Backup complete: ${counts.entries.where((e) => e.value > 0).map((e) => '${e.value} ${e.key}').join(', ')}',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Backup failed: $e')));
+      }
+    }
+  }
+
+  Future<void> _peekCloudData(BuildContext context) async {
+    try {
+      final storage = context.read<ProfileProvider>().storage;
+      final syncService = CloudSyncService(storage);
+      final counts = await syncService.peekCloudData();
+
+      if (!context.mounted) return;
+
+      if (counts == null) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('No cloud backup found')));
+        return;
+      }
+
+      final summary = counts.entries
+          .where((e) => e.value > 0)
+          .map((e) => '${e.value} ${e.key}')
+          .join(', ');
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Cloud backup contains: $summary'),
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to check cloud: $e')));
+      }
+    }
   }
 
   Widget _buildSectionHeader(ThemeData theme, String title) {
@@ -189,167 +445,23 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
     String label,
     String value,
   ) {
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          child: Row(
-            children: [
-              Icon(icon, size: 20, color: theme.colorScheme.onSurfaceVariant),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(label, style: theme.textTheme.labelSmall),
-                    Text(value, style: theme.textTheme.bodyLarge),
-                  ],
-                ),
-              ),
-            ],
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Row(
+        children: [
+          Icon(icon, size: 20, color: theme.colorScheme.onSurfaceVariant),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: theme.textTheme.labelSmall),
+                Text(value, style: theme.textTheme.bodyLarge),
+              ],
+            ),
           ),
-        ),
-        if (value !=
-            childrenLastValue(
-              value,
-            )) // Simple way to skip divider for last, but let's just use manual dividers or listview
-          const Divider(height: 1),
-      ],
-    );
-  }
-
-  // Helper for identifying last item (simplified for now)
-  String childrenLastValue(String val) => '';
-
-  // --- Reuse the Edit Logic from ProfileScreen (better to refactor it later) ---
-  void _showEditProfileDialog(BuildContext context, UserProfile existing) {
-    // Controller and state logic same as ProfileScreen...
-    // I will copy the logic here for now to ensure working functionality
-    final nameCtrl = TextEditingController(text: existing.name);
-    final heightCtrl = TextEditingController(
-      text: existing.height.toStringAsFixed(0),
-    );
-    final weightCtrl = TextEditingController(
-      text: existing.weight % 1 == 0
-          ? existing.weight.toInt().toString()
-          : existing.weight.toString(),
-    );
-    final goalCtrl = TextEditingController(
-      text: existing.weeklyGoal.toString(),
-    );
-    String unit = existing.weightUnit;
-    DateTime? selectedBirthDate = existing.birthDate;
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return Padding(
-              padding: EdgeInsets.fromLTRB(
-                24,
-                24,
-                24,
-                MediaQuery.of(ctx).viewInsets.bottom + 24,
-              ),
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      'Edit Profile',
-                      style: Theme.of(ctx).textTheme.titleLarge,
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: nameCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Name',
-                        prefixIcon: Icon(Icons.person),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    InkWell(
-                      onTap: () async {
-                        final picked = await showDatePicker(
-                          context: ctx,
-                          initialDate: selectedBirthDate ?? DateTime.now(),
-                          firstDate: DateTime(1900),
-                          lastDate: DateTime.now(),
-                        );
-                        if (picked != null) {
-                          setModalState(() => selectedBirthDate = picked);
-                        }
-                      },
-                      child: InputDecorator(
-                        decoration: const InputDecoration(
-                          labelText: 'Date of Birth',
-                          prefixIcon: Icon(Icons.cake),
-                        ),
-                        child: Text(
-                          selectedBirthDate != null
-                              ? '${selectedBirthDate!.day}/${selectedBirthDate!.month}/${selectedBirthDate!.year}'
-                              : 'Select Date',
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: heightCtrl,
-                            keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(
-                              labelText: 'Height (cm)',
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: TextField(
-                            controller: weightCtrl,
-                            keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(
-                              labelText: 'Weight (kg)',
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: goalCtrl,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'Weekly Gym Goal (days)',
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    FilledButton(
-                      onPressed: () {
-                        context.read<ProfileProvider>().updateProfile(
-                          name: nameCtrl.text,
-                          height: double.tryParse(heightCtrl.text) ?? 0,
-                          weight: double.tryParse(weightCtrl.text) ?? 0,
-                          birthDate: selectedBirthDate!,
-                          weeklyGoal: int.tryParse(goalCtrl.text) ?? 4,
-                          weightUnit: unit,
-                        );
-                        Navigator.pop(ctx);
-                        setState(() {}); // Refresh detail screen
-                      },
-                      child: const Text('Save Changes'),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
+        ],
+      ),
     );
   }
 }

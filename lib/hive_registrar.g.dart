@@ -3,18 +3,20 @@
 // Check in to version control
 
 import 'package:hive_ce/hive_ce.dart';
-import 'package:gym_tracker/models/body_metrics.dart';
-import 'package:gym_tracker/models/day_log.dart';
-import 'package:gym_tracker/models/exercise.dart';
-import 'package:gym_tracker/models/run_log.dart';
-import 'package:gym_tracker/models/sleep_log.dart';
-import 'package:gym_tracker/models/user_profile.dart';
-import 'package:gym_tracker/models/weight_entry.dart';
-import 'package:gym_tracker/models/workout_routine.dart';
-import 'package:gym_tracker/models/workout_session.dart';
+import 'package:fitprint/models/achievement.dart';
+import 'package:fitprint/models/body_metrics.dart';
+import 'package:fitprint/models/day_log.dart';
+import 'package:fitprint/models/exercise.dart';
+import 'package:fitprint/models/run_log.dart';
+import 'package:fitprint/models/sleep_log.dart';
+import 'package:fitprint/models/user_profile.dart';
+import 'package:fitprint/models/weight_entry.dart';
+import 'package:fitprint/models/workout_routine.dart';
+import 'package:fitprint/models/workout_session.dart';
 
 extension HiveRegistrar on HiveInterface {
   void registerAdapters() {
+    registerAdapter(AchievementAdapter());
     registerAdapter(ActivityTypeAdapter());
     registerAdapter(BodyMetricsAdapter());
     registerAdapter(DayLogAdapter());
@@ -32,6 +34,7 @@ extension HiveRegistrar on HiveInterface {
 
 extension IsolatedHiveRegistrar on IsolatedHiveInterface {
   void registerAdapters() {
+    registerAdapter(AchievementAdapter());
     registerAdapter(ActivityTypeAdapter());
     registerAdapter(BodyMetricsAdapter());
     registerAdapter(DayLogAdapter());

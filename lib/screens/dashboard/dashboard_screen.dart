@@ -34,28 +34,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final workout = context.watch<WorkoutProvider>();
-    final profile = context.watch<ProfileProvider>();
-    final name = profile.profile?.name ?? 'there';
-    final weeklyGoal = profile.profile?.weeklyGoal ?? 4;
-    final events = workout.getCalendarEvents();
 
     return Scaffold(
       floatingActionButton: const DashboardFab(),
       body: SafeArea(
         child: CustomScrollView(
           slivers: [
-            // Header
+            // Header — only rebuilds when profile name changes
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      '${_getGreeting()}, $name',
-                      style: theme.textTheme.headlineMedium,
-                    ).animate().fadeIn(duration: 400.ms).slideX(begin: -0.1),
+                    Consumer<ProfileProvider>(
+                      builder: (context, profile, _) {
+                        final name = profile.profile?.name ?? 'there';
+                        return Text(
+                              '${_getGreeting()}, $name',
+                              style: theme.textTheme.headlineMedium,
+                            )
+                            .animate()
+                            .fadeIn(duration: 400.ms)
+                            .slideX(begin: -0.1);
+                      },
+                    ),
                     const SizedBox(height: 8),
                   ],
                 ),
@@ -65,102 +68,115 @@ class _DashboardScreenState extends State<DashboardScreen> {
             // Stats Row (Streak Row)
             const SliverToBoxAdapter(child: DashboardStatsRow()),
 
-            // Weekly Progress
+            // Weekly Progress — scoped rebuild for goal changes
             SliverToBoxAdapter(
-              child: WeeklyProgressCard(weeklyGoal: weeklyGoal),
+              child: Consumer<ProfileProvider>(
+                builder: (context, profile, _) {
+                  final weeklyGoal = profile.profile?.weeklyGoal ?? 4;
+                  return WeeklyProgressCard(weeklyGoal: weeklyGoal);
+                },
+              ),
             ),
 
             // Activity Stats (Activity This Month)
             const SliverToBoxAdapter(child: ActivityStatsCard()),
 
-            // Calendar
+            // Calendar — scoped rebuild for workout data changes
             SliverToBoxAdapter(
-              child: Card(
-                margin: const EdgeInsets.all(16),
-                child: Padding(
-                  padding: const EdgeInsets.all(8),
-                  child: TableCalendar(
-                    firstDay: DateTime.utc(2020, 1, 1),
-                    lastDay: DateTime.utc(2030, 12, 31),
-                    focusedDay: _focusedDay,
-                    calendarFormat: CalendarFormat.month,
-                    selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
-                    onDaySelected: (selectedDay, focusedDay) {
-                      setState(() {
-                        _selectedDay = selectedDay;
-                        _focusedDay = focusedDay;
-                      });
-                      _showDayDetail(selectedDay);
-                    },
-                    onPageChanged: (focusedDay) {
-                      _focusedDay = focusedDay;
-                    },
-                    calendarStyle: CalendarStyle(
-                      todayDecoration: BoxDecoration(
-                        color: theme.colorScheme.primary.withValues(alpha: 0.3),
-                        shape: BoxShape.circle,
-                      ),
-                      selectedDecoration: BoxDecoration(
-                        color: theme.colorScheme.primary,
-                        shape: BoxShape.circle,
-                      ),
-                      todayTextStyle: TextStyle(
-                        color: theme.colorScheme.primary,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      markersMaxCount: 3,
-                    ),
-                    calendarBuilders: CalendarBuilders(
-                      markerBuilder: (context, date, _) {
-                        final normalized = DateTime(
-                          date.year,
-                          date.month,
-                          date.day,
-                        );
-                        final activities = events[normalized];
-                        if (activities == null || activities.isEmpty) {
-                          return null;
-                        }
-                        return Positioned(
-                          bottom: 1,
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: activities.map((type) {
-                              Color color;
-                              switch (type) {
-                                case ActivityType.gym:
-                                  color = AppColors.gym;
-                                  break;
-                                case ActivityType.run:
-                                  color = AppColors.run;
-                                  break;
-                                case ActivityType.swim:
-                                  color = AppColors.swim;
-                                  break;
-                              }
-                              return Container(
-                                margin: const EdgeInsets.symmetric(
-                                  horizontal: 1,
-                                ),
-                                width: 7,
-                                height: 7,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: color,
-                                ),
-                              );
-                            }).toList(),
+              child: Consumer<WorkoutProvider>(
+                builder: (context, workout, _) {
+                  final events = workout.getCalendarEvents();
+                  return Card(
+                    margin: const EdgeInsets.all(16),
+                    child: Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: TableCalendar(
+                        firstDay: DateTime.utc(2020, 1, 1),
+                        lastDay: DateTime.utc(2030, 12, 31),
+                        focusedDay: _focusedDay,
+                        calendarFormat: CalendarFormat.month,
+                        selectedDayPredicate: (day) =>
+                            isSameDay(_selectedDay, day),
+                        onDaySelected: (selectedDay, focusedDay) {
+                          setState(() {
+                            _selectedDay = selectedDay;
+                            _focusedDay = focusedDay;
+                          });
+                          _showDayDetail(selectedDay);
+                        },
+                        onPageChanged: (focusedDay) {
+                          _focusedDay = focusedDay;
+                        },
+                        calendarStyle: CalendarStyle(
+                          todayDecoration: BoxDecoration(
+                            color: theme.colorScheme.primary.withValues(
+                              alpha: 0.3,
+                            ),
+                            shape: BoxShape.circle,
                           ),
-                        );
-                      },
+                          selectedDecoration: BoxDecoration(
+                            color: theme.colorScheme.primary,
+                            shape: BoxShape.circle,
+                          ),
+                          todayTextStyle: TextStyle(
+                            color: theme.colorScheme.primary,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          markersMaxCount: 3,
+                        ),
+                        calendarBuilders: CalendarBuilders(
+                          markerBuilder: (context, date, _) {
+                            final normalized = DateTime(
+                              date.year,
+                              date.month,
+                              date.day,
+                            );
+                            final activities = events[normalized];
+                            if (activities == null || activities.isEmpty) {
+                              return null;
+                            }
+                            return Positioned(
+                              bottom: 1,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: activities.map((type) {
+                                  Color color;
+                                  switch (type) {
+                                    case ActivityType.gym:
+                                      color = AppColors.gym;
+                                      break;
+                                    case ActivityType.run:
+                                      color = AppColors.run;
+                                      break;
+                                    case ActivityType.swim:
+                                      color = AppColors.swim;
+                                      break;
+                                  }
+                                  return Container(
+                                    margin: const EdgeInsets.symmetric(
+                                      horizontal: 1,
+                                    ),
+                                    width: 7,
+                                    height: 7,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: color,
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
+                            );
+                          },
+                        ),
+                        headerStyle: const HeaderStyle(
+                          formatButtonVisible: false,
+                          titleCentered: true,
+                        ),
+                      ),
                     ),
-                    headerStyle: const HeaderStyle(
-                      formatButtonVisible: false,
-                      titleCentered: true,
-                    ),
-                  ),
-                ),
-              ).animate().fadeIn(duration: 500.ms, delay: 100.ms),
+                  ).animate().fadeIn(duration: 500.ms, delay: 100.ms);
+                },
+              ),
             ),
 
             const SliverToBoxAdapter(child: SizedBox(height: 100)),

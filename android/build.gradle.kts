@@ -1,3 +1,13 @@
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath("com.google.gms:google-services:4.4.2")
+    }
+}
+
 allprojects {
     repositories {
         google()
@@ -17,19 +27,28 @@ subprojects {
 }
 subprojects {
     project.evaluationDependsOn(":app")
-    project.pluginManager.withPlugin("org.jetbrains.kotlin.android") {
+
+    fun applyJvm17Overrides(project: Project) {
+        project.plugins.withType<com.android.build.gradle.LibraryPlugin> {
+            project.extensions.configure<com.android.build.gradle.LibraryExtension> {
+                compileOptions {
+                    sourceCompatibility = JavaVersion.VERSION_17
+                    targetCompatibility = JavaVersion.VERSION_17
+                }
+            }
+        }
         project.tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
             compilerOptions {
                 jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
             }
         }
     }
-    project.pluginManager.withPlugin("com.android.library") {
-        project.extensions.configure<com.android.build.gradle.LibraryExtension> {
-            compileOptions {
-                sourceCompatibility = JavaVersion.VERSION_17
-                targetCompatibility = JavaVersion.VERSION_17
-            }
+
+    if (project.state.executed) {
+        applyJvm17Overrides(project)
+    } else {
+        project.afterEvaluate {
+            applyJvm17Overrides(this)
         }
     }
 }

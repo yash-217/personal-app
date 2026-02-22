@@ -61,7 +61,7 @@ class SleepScreen extends StatelessWidget {
       floatingActionButton: FloatingActionButton(
         heroTag: 'add_sleep_log',
         onPressed: () => _navigateToAddLog(context),
-        child: const Icon(Icons.add),
+        child: const Icon(Icons.add_rounded),
       ),
     );
   }
