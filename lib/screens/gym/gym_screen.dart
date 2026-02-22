@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../models/workout_routine.dart';
@@ -120,31 +121,85 @@ class GymScreen extends StatelessWidget {
                   final sessions = workoutProvider.sessions.reversed.toList();
                   if (index >= sessions.length) return null;
                   final session = sessions[index];
-                  return ListTile(
-                    leading: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: AppColors.gym.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
+                  return Slidable(
+                    key: Key(session.id),
+                    startActionPane: ActionPane(
+                      motion: const ScrollMotion(),
+                      extentRatio: 0.25,
+                      children: [
+                        SlidableAction(
+                          onPressed: (context) {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => WorkoutSessionScreen(
+                                  existingSession: session,
+                                ),
+                              ),
+                            );
+                          },
+                          backgroundColor: theme.colorScheme.primary,
+                          foregroundColor: theme.colorScheme.onPrimary,
+                          icon: Icons.edit,
+                          label: 'Edit',
+                        ),
+                      ],
+                    ),
+                    endActionPane: ActionPane(
+                      motion: const ScrollMotion(),
+                      extentRatio: 0.25,
+                      children: [
+                        SlidableAction(
+                          onPressed: (context) async {
+                            final confirm = await ConfirmDialog.show(
+                              context,
+                              title: 'Delete Session',
+                              message:
+                                  'Are you sure you want to delete this session?',
+                            );
+                            if (confirm && context.mounted) {
+                              context.read<WorkoutProvider>().deleteSession(
+                                session.id,
+                              );
+                            }
+                          },
+                          backgroundColor: Colors.red,
+                          foregroundColor: Colors.white,
+                          icon: Icons.delete,
+                          label: 'Delete',
+                        ),
+                      ],
+                    ),
+                    child: ListTile(
+                      leading: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: AppColors.gym.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(
+                          Icons.fitness_center,
+                          color: AppColors.gym,
+                        ),
                       ),
-                      child: const Icon(
-                        Icons.fitness_center,
-                        color: AppColors.gym,
+                      title: Text(
+                        session.targetMuscleGroups.join(", "),
+                        style: theme.textTheme.bodyMedium,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
+                      subtitle: Text(
+                        '${session.date.day}/${session.date.month}/${session.date.year} • ${session.completed ? "Completed" : "Incomplete"}',
+                        style: theme.textTheme.labelSmall,
+                      ),
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                WorkoutSessionScreen(existingSession: session),
+                          ),
+                        );
+                      },
                     ),
-                    title: Text(
-                      session.targetMuscleGroups.join(", "),
-                      style: theme.textTheme.bodyMedium,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    subtitle: Text(
-                      '${session.date.day}/${session.date.month}/${session.date.year} • ${session.completed ? "Completed" : "Incomplete"}',
-                      style: theme.textTheme.labelSmall,
-                    ),
-                    onTap: () {
-                      // Could navigate to details or repeat
-                    },
                   );
                 },
                 childCount: workoutProvider.sessions.length > 5

@@ -34,10 +34,20 @@ class _ExerciseLibraryScreenState extends State<ExerciseLibraryScreen> {
           children: [
             // Header
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-              child: Text(
-                'Exercise Library',
-                style: theme.textTheme.headlineMedium,
+              padding: const EdgeInsets.fromLTRB(8, 16, 8, 0),
+              child: Row(
+                children: [
+                  const BackButton(),
+                  Expanded(
+                    child: Center(
+                      child: Text(
+                        'Exercise Library',
+                        style: theme.textTheme.headlineMedium,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 48), // Balance the back button
+                ],
               ),
             ),
 

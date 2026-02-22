@@ -8,6 +8,7 @@ import '../models/user_profile.dart';
 import '../models/body_metrics.dart';
 import '../models/workout_routine.dart';
 import '../models/sleep_log.dart';
+import '../models/achievement.dart';
 
 class StorageService {
   static const String _exercisesBox = 'exercises';
@@ -20,6 +21,7 @@ class StorageService {
   static const String _settingsBox = 'settings';
   static const String _routinesBox = 'workoutRoutines';
   static const String _sleepLogsBox = 'sleepLogs';
+  static const String _achievementsBox = 'achievements';
 
   late Box<Exercise> exercisesBox;
   late Box<DayLog> dayLogsBox;
@@ -31,6 +33,7 @@ class StorageService {
   late Box settingsBox;
   late Box<WorkoutRoutine> routinesBox;
   late Box<SleepLog> sleepLogsBox;
+  late Box<Achievement> achievementsBox;
 
   Future<void> init() async {
     await Hive.initFlutter();
@@ -48,6 +51,7 @@ class StorageService {
     Hive.registerAdapter(WorkoutSetAdapter());
     Hive.registerAdapter(ExerciseHistoryEntryAdapter());
     Hive.registerAdapter(SleepLogAdapter());
+    Hive.registerAdapter(AchievementAdapter());
 
     // Open boxes
     exercisesBox = await Hive.openBox<Exercise>(_exercisesBox);
@@ -60,6 +64,7 @@ class StorageService {
     settingsBox = await Hive.openBox(_settingsBox);
     routinesBox = await Hive.openBox<WorkoutRoutine>(_routinesBox);
     sleepLogsBox = await Hive.openBox<SleepLog>(_sleepLogsBox);
+    achievementsBox = await Hive.openBox<Achievement>(_achievementsBox);
   }
 
   // --- Exercises ---
@@ -163,7 +168,8 @@ class StorageService {
   }
 
   Future<void> deleteBodyMetrics(String id) async {
-    await bodyMetricsBox.delete(id);
+    final metric = bodyMetricsBox.values.firstWhere((m) => m.id == id);
+    await metric.delete();
   }
 
   // --- Settings ---
@@ -196,5 +202,16 @@ class StorageService {
 
   Future<void> deleteSleepLog(String id) async {
     await sleepLogsBox.delete(id);
+  }
+
+  // --- Achievements ---
+  List<Achievement> getAllAchievements() => achievementsBox.values.toList();
+
+  Future<void> saveAchievement(Achievement achievement) async {
+    await achievementsBox.put(achievement.id, achievement);
+  }
+
+  Future<void> deleteAchievement(String id) async {
+    await achievementsBox.delete(id);
   }
 }

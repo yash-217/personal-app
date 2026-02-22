@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:gym_tracker/models/sleep_log.dart';
-import 'package:gym_tracker/providers/sleep_provider.dart';
-import 'package:gym_tracker/services/storage_service.dart';
+import 'package:fitprint/models/sleep_log.dart';
+import 'package:fitprint/providers/sleep_provider.dart';
+import 'package:fitprint/services/storage_service.dart';
 
 // Manual Mock
 class MockStorageService extends Fake implements StorageService {

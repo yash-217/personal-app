@@ -1,41 +1,83 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'core/theme/app_theme.dart';
 import 'services/storage_service.dart';
 import 'services/exercise_api_service.dart';
+import 'services/notification_service.dart';
+import 'services/auth_service.dart';
 import 'providers/theme_provider.dart';
 import 'providers/workout_provider.dart';
 import 'providers/exercise_provider.dart';
 import 'providers/profile_provider.dart';
 import 'providers/sleep_provider.dart';
+import 'providers/achievement_provider.dart';
+import 'providers/auth_provider.dart';
 import 'screens/main_shell.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Firebase
+  await Firebase.initializeApp();
 
   final storage = StorageService();
   await storage.init();
 
   final exerciseApi = ExerciseApiService(storage);
 
+  // Initialize notifications
+  final notificationService = NotificationService();
+  await notificationService.init();
+
+  final sleepProvider = SleepProvider(storage);
+  final workoutProvider = WorkoutProvider(storage);
+  final achievementProvider = AchievementProvider(storage);
+
+  // Cross-link providers for coordinated notification rescheduling
+  sleepProvider.setWorkoutProvider(workoutProvider);
+  workoutProvider.setSleepProvider(sleepProvider);
+
+  // Link achievement provider
+  sleepProvider.setAchievementProvider(achievementProvider);
+  workoutProvider.setAchievementProvider(achievementProvider);
+
+  // Schedule notifications based on current data
+  notificationService.rescheduleNotifications(
+    sleepLogs: sleepProvider.logs,
+    dayLogs: workoutProvider.dayLogs,
+  );
+
+  // Run initial achievement evaluation
+  achievementProvider.evaluate(
+    dayLogs: workoutProvider.dayLogs,
+    sleepLogs: sleepProvider.logs,
+    runLogs: workoutProvider.runLogs,
+  );
+
+  // Auth service
+  final authService = AuthService();
+
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => ThemeProvider(storage)),
-        ChangeNotifierProvider(create: (_) => WorkoutProvider(storage)),
+        ChangeNotifierProvider.value(value: workoutProvider),
         ChangeNotifierProvider(
           create: (_) => ExerciseProvider(exerciseApi, storage),
         ),
         ChangeNotifierProvider(create: (_) => ProfileProvider(storage)),
-        ChangeNotifierProvider(create: (_) => SleepProvider(storage)),
+        ChangeNotifierProvider.value(value: sleepProvider),
+        ChangeNotifierProvider.value(value: achievementProvider),
+        ChangeNotifierProvider(create: (_) => AuthProvider(authService)),
       ],
-      child: const GymTrackerApp(),
+      child: const FitPrintApp(),
     ),
   );
 }
 
-class GymTrackerApp extends StatelessWidget {
-  const GymTrackerApp({super.key});
+class FitPrintApp extends StatelessWidget {
+  const FitPrintApp({super.key});
 
   @override
   Widget build(BuildContext context) {

@@ -1,4 +1,4 @@
-name: gym_tracker
+name: fitprint
 description: "FitPrint — your personal fitness tracker with exercise library, workout sessions, run tracking, and body metrics."
 publish_to: 'none'
 version: 1.0.0+1
@@ -10,6 +10,7 @@ dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: any
+  flutter_slidable: ^4.0.3
 
   # State management
   provider: any
@@ -42,8 +43,21 @@ dependencies:
   google_mlkit_text_recognition: ^0.15.1
   image_picker: any
 
+  # Notifications
+  flutter_local_notifications: any
+  timezone: any
+
   # Utilities
   uuid: any
+  share_plus: any
+  path_provider: any
+  file_picker: any
+
+  # Firebase & Auth
+  firebase_core: any
+  firebase_auth: any
+  cloud_firestore: any
+  google_sign_in: ^6.2.0
 
 dev_dependencies:
   flutter_test:

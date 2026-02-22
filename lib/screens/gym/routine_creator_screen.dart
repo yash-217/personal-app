@@ -99,15 +99,39 @@ class _RoutineCreatorScreenState extends State<RoutineCreatorScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(_step == 0 ? 'New Routine' : 'Add Exercises'),
+        title: Text(
+          _step == 0
+              ? 'Name Routine'
+              : (_step == 1 ? 'Add Exercises' : 'Review & Reorder'),
+        ),
+        centerTitle: true,
+        leading: _step > 0
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: () => setState(() => _step--),
+              )
+            : null,
         actions: [
-          if (_step == 1)
-            TextButton(onPressed: _saveRoutine, child: const Text('Save')),
+          if (_step == 1 && _selectedExercises.isNotEmpty)
+            TextButton(
+              onPressed: () => setState(() => _step = 2),
+              child: const Text('Review'),
+            ),
+          if (_step == 2)
+            TextButton(
+              onPressed: _saveRoutine,
+              child: const Text(
+                'Save',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
         ],
       ),
       body: AnimatedSwitcher(
         duration: const Duration(milliseconds: 300),
-        child: _step == 0 ? _buildStep1(theme) : _buildStep2(theme),
+        child: _step == 0
+            ? _buildStep1(theme)
+            : (_step == 1 ? _buildStep2(theme) : _buildStep3(theme)),
       ),
       floatingActionButton: _step == 0
           ? FloatingActionButton.extended(
@@ -123,7 +147,7 @@ class _RoutineCreatorScreenState extends State<RoutineCreatorScreen> {
                 setState(() => _step = 1);
               },
               label: const Text('Next'),
-              icon: const Icon(Icons.arrow_forward),
+              icon: const Icon(Icons.arrow_forward_rounded),
             )
           : null,
     );
@@ -439,6 +463,117 @@ class _RoutineCreatorScreenState extends State<RoutineCreatorScreen> {
                 ),
               ).animate().fadeIn(duration: 200.ms);
             },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStep3(ThemeData theme) {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Text(
+            'Hold and drag to reorder exercises',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+        Expanded(
+          child: ReorderableListView.builder(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            itemCount: _selectedExercises.length,
+            onReorder: (oldIndex, newIndex) {
+              setState(() {
+                if (newIndex > oldIndex) {
+                  newIndex -= 1;
+                }
+                final exercise = _selectedExercises.removeAt(oldIndex);
+                _selectedExercises.insert(newIndex, exercise);
+              });
+            },
+            itemBuilder: (context, index) {
+              final exercise = _selectedExercises[index];
+              final color = AppColors.getBodyPartColor(exercise.bodyPart);
+
+              return Card(
+                key: ValueKey(exercise.id),
+                margin: const EdgeInsets.only(bottom: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.drag_indicator,
+                        color: theme.colorScheme.onSurfaceVariant.withValues(
+                          alpha: 0.5,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: CachedNetworkImage(
+                          imageUrl: exercise.gifUrl,
+                          width: 50,
+                          height: 50,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _capitalize(exercise.name),
+                              style: theme.textTheme.titleSmall,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            Text(
+                              _capitalize(exercise.bodyPart),
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: color,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.remove_circle_outline, size: 20),
+                        color: theme.colorScheme.error,
+                        onPressed: () {
+                          setState(() {
+                            _selectedExercises.removeAt(index);
+                            if (_selectedExercises.isEmpty) {
+                              _step = 1;
+                            }
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.all(24),
+          child: FilledButton.icon(
+            onPressed: _saveRoutine,
+            icon: const Icon(Icons.check),
+            label: const Text('Finish & Save Routine'),
+            style: FilledButton.styleFrom(
+              minimumSize: const Size.fromHeight(56),
+              backgroundColor: AppColors.success,
+              foregroundColor: Colors.white,
+            ),
           ),
         ),
       ],

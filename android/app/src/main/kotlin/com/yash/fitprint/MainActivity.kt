@@ -1,4 +1,4 @@
-package com.yash.gym_tracker
+package com.yash.fitprint
 
 import io.flutter.embedding.android.FlutterActivity
 
