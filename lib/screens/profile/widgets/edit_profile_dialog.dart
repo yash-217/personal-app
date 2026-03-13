@@ -20,6 +20,7 @@ void showEditProfileDialog(BuildContext context, UserProfile? existing) {
     text: (existing?.weeklyGoal ?? 4).toString(),
   );
   String unit = existing?.weightUnit ?? 'kg';
+  String selectedGender = existing?.gender ?? '';
   DateTime? selectedBirthDate = existing?.birthDate;
 
   final formKey = GlobalKey<FormState>();
@@ -131,6 +132,36 @@ void showEditProfileDialog(BuildContext context, UserProfile? existing) {
                       ],
                     ),
                     const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      initialValue: selectedGender.isEmpty ? null : selectedGender,
+                      decoration: const InputDecoration(
+                        labelText: 'Sex',
+                        prefixIcon: Icon(Icons.wc),
+                      ),
+                      items: const [
+                        DropdownMenuItem(
+                          value: 'Male',
+                          child: Text('Male'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'Female',
+                          child: Text('Female'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'Other',
+                          child: Text('Other'),
+                        ),
+                      ],
+                      onChanged: (val) =>
+                          setModalState(() => selectedGender = val ?? ''),
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Please select';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 12),
                     Row(
                       children: [
                         Expanded(
@@ -207,6 +238,7 @@ void showEditProfileDialog(BuildContext context, UserProfile? existing) {
                           name: nameCtrl.text.trim(),
                           height: height,
                           weight: weight,
+                          gender: selectedGender,
                           birthDate: selectedBirthDate!,
                           weeklyGoal: goal,
                           weightUnit: unit,

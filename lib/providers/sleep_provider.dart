@@ -55,6 +55,8 @@ class SleepProvider extends ChangeNotifier {
     int quality = 5,
     String? mood,
     String? notes,
+    bool? morningErection,
+    bool? period,
   }) async {
     final log = SleepLog(
       id: _uuid.v4(),
@@ -65,6 +67,8 @@ class SleepProvider extends ChangeNotifier {
       quality: quality,
       mood: mood,
       notes: notes,
+      morningErection: morningErection,
+      period: period,
     );
     await _storage.saveSleepLog(log);
     _logs.insert(0, log);

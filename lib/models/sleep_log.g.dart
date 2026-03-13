@@ -25,13 +25,15 @@ class SleepLogAdapter extends TypeAdapter<SleepLog> {
       quality: fields[5] == null ? 5 : (fields[5] as num).toInt(),
       mood: fields[6] as String?,
       notes: fields[7] as String?,
+      morningErection: fields[8] as bool?,
+      period: fields[9] as bool?,
     );
   }
 
   @override
   void write(BinaryWriter writer, SleepLog obj) {
     writer
-      ..writeByte(8)
+      ..writeByte(10)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -47,7 +49,11 @@ class SleepLogAdapter extends TypeAdapter<SleepLog> {
       ..writeByte(6)
       ..write(obj.mood)
       ..writeByte(7)
-      ..write(obj.notes);
+      ..write(obj.notes)
+      ..writeByte(8)
+      ..write(obj.morningErection)
+      ..writeByte(9)
+      ..write(obj.period);
   }
 
   @override
