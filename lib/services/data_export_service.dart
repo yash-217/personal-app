@@ -4,6 +4,13 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:file_picker/file_picker.dart';
 import 'storage_service.dart';
+import '../models/day_log.dart';
+import '../models/workout_session.dart';
+import '../models/run_log.dart';
+import '../models/sleep_log.dart';
+import '../models/body_metrics.dart';
+import '../models/workout_routine.dart';
+import '../models/user_profile.dart';
 
 /// Service to export all Hive data as JSON and import it back.
 class DataExportService {
@@ -160,13 +167,152 @@ class DataExportService {
 
     final counts = <String, int>{};
 
-    // Import counts for summary
-    counts['dayLogs'] = (data['dayLogs'] as List?)?.length ?? 0;
-    counts['workoutSessions'] = (data['workoutSessions'] as List?)?.length ?? 0;
-    counts['runLogs'] = (data['runLogs'] as List?)?.length ?? 0;
-    counts['sleepLogs'] = (data['sleepLogs'] as List?)?.length ?? 0;
-    counts['bodyMetrics'] = (data['bodyMetrics'] as List?)?.length ?? 0;
-    counts['routines'] = (data['routines'] as List?)?.length ?? 0;
+    // Day Logs
+    final dayLogsList = data['dayLogs'] as List?;
+    if (dayLogsList != null) {
+      for (final item in dayLogsList) {
+        final dl = DayLog(
+          id: item['id'],
+          date: DateTime.parse(item['date']),
+          activities: (item['activities'] as List)
+              .map((i) => ActivityType.values[i as int])
+              .toList(),
+        );
+        await _storage.dayLogsBox.put(dl.id, dl);
+      }
+      counts['dayLogs'] = dayLogsList.length;
+    }
+
+    // Workout Sessions
+    final sessionsList = data['workoutSessions'] as List?;
+    if (sessionsList != null) {
+      for (final item in sessionsList) {
+        final perfData = item['performance'] as Map?;
+        final perf = <String, List<WorkoutSet>>{};
+        if (perfData != null) {
+          for (final entry in perfData.entries) {
+            perf[entry.key] = (entry.value as List)
+                .map(
+                  (s) => WorkoutSet(
+                    weightLbs: (s['weightLbs'] as num).toDouble(),
+                    weightKg: (s['weightKg'] as num).toDouble(),
+                    reps: s['reps'] as int,
+                  ),
+                )
+                .toList();
+          }
+        }
+        final ws = WorkoutSession(
+          id: item['id'],
+          date: DateTime.parse(item['date']),
+          targetMuscleGroups: List<String>.from(
+            item['targetMuscleGroups'] ?? [],
+          ),
+          exerciseIds: List<String>.from(item['exerciseIds'] ?? []),
+          completed: item['completed'] ?? false,
+          performance: perf,
+        );
+        await _storage.sessionsBox.put(ws.id, ws);
+      }
+      counts['workoutSessions'] = sessionsList.length;
+    }
+
+    // Run Logs
+    final runLogsList = data['runLogs'] as List?;
+    if (runLogsList != null) {
+      for (final item in runLogsList) {
+        final rl = RunLog(
+          id: item['id'],
+          date: DateTime.parse(item['date']),
+          distanceKm: (item['distanceKm'] as num).toDouble(),
+          durationSeconds: item['durationSeconds'] as int,
+          elevationGain: item['elevationGain'] != null
+              ? (item['elevationGain'] as num).toDouble()
+              : null,
+          source: item['source'] ?? 'manual',
+          notes: item['notes'],
+        );
+        await _storage.runLogsBox.put(rl.id, rl);
+      }
+      counts['runLogs'] = runLogsList.length;
+    }
+
+    // Sleep Logs
+    final sleepLogsList = data['sleepLogs'] as List?;
+    if (sleepLogsList != null) {
+      for (final item in sleepLogsList) {
+        final sl = SleepLog(
+          id: item['id'],
+          date: DateTime.parse(item['date']),
+          bedtime: DateTime.parse(item['bedtime']),
+          wakeTime: DateTime.parse(item['wakeTime']),
+          avoidedScreentime: item['avoidedScreentime'] ?? false,
+          quality: item['quality'] ?? 5,
+          mood: item['mood'],
+          notes: item['notes'],
+        );
+        await _storage.sleepLogsBox.put(sl.id, sl);
+      }
+      counts['sleepLogs'] = sleepLogsList.length;
+    }
+
+    // Body Metrics
+    final bodyMetricsList = data['bodyMetrics'] as List?;
+    if (bodyMetricsList != null) {
+      for (final item in bodyMetricsList) {
+        final bm = BodyMetrics(
+          id: item['id'],
+          date: DateTime.parse(item['date']),
+          weight: (item['weight'] as num).toDouble(),
+          bodyFatPercentage:
+              (item['bodyFatPercentage'] as num?)?.toDouble() ?? 0,
+          basalMetabolicRate:
+              (item['basalMetabolicRate'] as num?)?.toDouble() ?? 0,
+          visceralFatLevel: (item['visceralFatLevel'] as num?)?.toDouble() ?? 0,
+          protein: (item['protein'] as num?)?.toDouble() ?? 0,
+          totalBodyWater: (item['totalBodyWater'] as num?)?.toDouble() ?? 0,
+          bodyFatMass: (item['bodyFatMass'] as num?)?.toDouble() ?? 0,
+          recommendedCalorieIntake:
+              (item['recommendedCalorieIntake'] as num?)?.toDouble() ?? 0,
+        );
+        await _storage.bodyMetricsBox.put(bm.id, bm);
+      }
+      counts['bodyMetrics'] = bodyMetricsList.length;
+    }
+
+    // Routines
+    final routinesList = data['routines'] as List?;
+    if (routinesList != null) {
+      for (final item in routinesList) {
+        final r = WorkoutRoutine(
+          id: item['id'],
+          name: item['name'],
+          exerciseIds: List<String>.from(item['exerciseIds'] ?? []),
+          color: item['color'] ?? 0xFF000000,
+          targetMuscles: List<String>.from(item['targetMuscles'] ?? []),
+        );
+        await _storage.routinesBox.put(r.id, r);
+      }
+      counts['routines'] = routinesList.length;
+    }
+
+    // Profile
+    final profileData = data['profile'] as Map?;
+    if (profileData != null) {
+      final p = UserProfile(
+        name: profileData['name'] ?? '',
+        age: profileData['age'] ?? 25,
+        height: (profileData['height'] as num?)?.toDouble() ?? 170.0,
+        weight: (profileData['weight'] as num?)?.toDouble() ?? 70.0,
+        gender: profileData['gender'] ?? 'Other',
+        birthDate: profileData['birthDate'] != null
+            ? DateTime.parse(profileData['birthDate'])
+            : null,
+        weeklyGoal: profileData['weeklyGoal'] ?? 3,
+        weightUnit: profileData['weightUnit'] ?? 'kg',
+      );
+      await _storage.profileBox.put('current', p);
+    }
 
     return counts;
   }

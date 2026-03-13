@@ -58,6 +58,10 @@ dependencies:
   firebase_auth: any
   cloud_firestore: any
   google_sign_in: ^6.2.0
+  firebase_app_check: ^0.4.1+4
+  firebase_crashlytics: ^5.0.7
+  firebase_analytics: ^12.1.2
+  firebase_performance: ^0.11.1+4
 
 dev_dependencies:
   flutter_test:

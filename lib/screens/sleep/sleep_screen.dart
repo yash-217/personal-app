@@ -370,18 +370,32 @@ class SleepScreen extends StatelessWidget {
                   Text(timeFormat.format(log.wakeTime)),
                 ],
               ),
-              if (log.notes != null || log.mood != null) ...[
+              if (log.notes != null || log.mood != null || log.morningErection == true) ...[
                 const SizedBox(height: 8),
-                if (log.mood != null)
-                  Chip(
-                    label: Text(log.mood!),
-                    visualDensity: VisualDensity.compact,
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    backgroundColor: Theme.of(context)
-                        .colorScheme
-                        .surfaceContainerHighest
-                        .withValues(alpha: 0.5),
-                  ),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: [
+                    if (log.mood != null)
+                      Chip(
+                        label: Text(log.mood!),
+                        visualDensity: VisualDensity.compact,
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        backgroundColor: Theme.of(context)
+                            .colorScheme
+                            .surfaceContainerHighest
+                            .withValues(alpha: 0.5),
+                      ),
+                    if (log.morningErection == true)
+                      Chip(
+                        avatar: const Icon(Icons.check_circle, size: 14, color: Colors.green),
+                        label: const Text('ME'),
+                        visualDensity: VisualDensity.compact,
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        backgroundColor: Colors.green.withValues(alpha: 0.1),
+                      ),
+                  ],
+                ),
                 if (log.notes != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 4),

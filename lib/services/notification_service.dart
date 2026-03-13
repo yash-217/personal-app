@@ -13,11 +13,19 @@ class NotificationService {
   final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
 
-  // Notification ID ranges: Sleep 100-106, Activity 200-206
+  // ── Notification ID ranges ──
+  // Sleep reminders:      100-106  (one per day for 7 days)
+  // Activity reminders:   200-206
+  // Wind-down reminders:  300-306
+  // Weekly check-in:      400
+  // Inactivity nudge:     500
   static const int _sleepBaseId = 100;
   static const int _activityBaseId = 200;
+  static const int _windDownBaseId = 300;
+  static const int _weeklyCheckInId = 400;
+  static const int _inactivityId = 500;
 
-  /// Android notification channel details
+  /// Android notification channels
   static const _channelId = 'daily_reminders';
   static const _channelName = 'Daily Reminders';
   static const _channelDescription =
@@ -66,13 +74,16 @@ class NotificationService {
     }
   }
 
+  // ──────────────────────────────────────────────────────────────────────────
+  // Public API – called on app launch and after any data change.
+  // ──────────────────────────────────────────────────────────────────────────
+
   /// Reschedule all notifications based on current data.
-  /// Call this on app launch and after any sleep/activity data change.
   Future<void> rescheduleNotifications({
     required List<SleepLog> sleepLogs,
     required List<DayLog> dayLogs,
   }) async {
-    // Cancel everything first
+    // Cancel everything first so we always have a clean slate
     await _plugin.cancelAll();
 
     final now = tz.TZDateTime.now(tz.local);
@@ -85,7 +96,7 @@ class NotificationService {
         targetDate.day,
       );
 
-      // --- Sleep reminder at 9 AM ---
+      // ── 1. Morning Sleep Reminder @ 9 AM ──
       final hasSleepLog = sleepLogs.any(
         (log) =>
             log.date.year == dateOnly.year &&
@@ -112,7 +123,7 @@ class NotificationService {
         }
       }
 
-      // --- Activity reminder at 8 PM ---
+      // ── 2. Evening Activity Reminder @ 8 PM ──
       final dayLog = dayLogs
           .where(
             (d) =>
@@ -144,6 +155,102 @@ class NotificationService {
           );
         }
       }
+
+      // ── 3. Wind-Down Reminder @ 10 PM ──
+      final windDownTime = tz.TZDateTime(
+        tz.local,
+        dateOnly.year,
+        dateOnly.month,
+        dateOnly.day,
+        22, // 10 PM
+      );
+      if (windDownTime.isAfter(now)) {
+        await _scheduleNotification(
+          id: _windDownBaseId + i,
+          title: '🌙 Time to wind down',
+          body: 'Put your screens away for better sleep tonight.',
+          scheduledDate: windDownTime,
+        );
+        debugPrint(
+          '[Notifications] Scheduled wind-down reminder for $windDownTime',
+        );
+      }
+    }
+
+    // ── 4. Weekly Check-in – Next Sunday @ 10 AM ──
+    _scheduleWeeklyCheckIn(now);
+
+    // ── 5. Inactivity Nudge – 3 days from now if no recent data ──
+    _scheduleInactivityNudge(now, sleepLogs, dayLogs);
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // Private helpers
+  // ──────────────────────────────────────────────────────────────────────────
+
+  void _scheduleWeeklyCheckIn(tz.TZDateTime now) {
+    // Find the next Sunday
+    int daysUntilSunday = DateTime.sunday - now.weekday;
+    if (daysUntilSunday <= 0) daysUntilSunday += 7;
+
+    final nextSunday = tz.TZDateTime(
+      tz.local,
+      now.year,
+      now.month,
+      now.day + daysUntilSunday,
+      10, // 10 AM
+    );
+
+    if (nextSunday.isAfter(now)) {
+      _scheduleNotification(
+        id: _weeklyCheckInId,
+        title: '📊 Weekly Review',
+        body: 'Check your progress on your weekly goals!',
+        scheduledDate: nextSunday,
+      );
+      debugPrint(
+        '[Notifications] Scheduled weekly check-in for $nextSunday',
+      );
+    }
+  }
+
+  void _scheduleInactivityNudge(
+    tz.TZDateTime now,
+    List<SleepLog> sleepLogs,
+    List<DayLog> dayLogs,
+  ) {
+    // Check if user has logged anything in the last 2 days
+    final twoDaysAgo = now.subtract(const Duration(days: 2));
+
+    final hasRecentSleep = sleepLogs.any(
+      (log) => log.date.isAfter(twoDaysAgo),
+    );
+    final hasRecentActivity = dayLogs.any(
+      (log) => log.date.isAfter(twoDaysAgo),
+    );
+
+    // If they have recent data, no need for a nudge. If they don't, schedule
+    // one 3 days from now (so effectively it fires ~3 days after last activity).
+    if (!hasRecentSleep && !hasRecentActivity) {
+      final nudgeTime = tz.TZDateTime(
+        tz.local,
+        now.year,
+        now.month,
+        now.day + 1, // tomorrow
+        11, // 11 AM
+      );
+
+      if (nudgeTime.isAfter(now)) {
+        _scheduleNotification(
+          id: _inactivityId,
+          title: '👋 We miss you!',
+          body: "You haven't logged anything recently. Come track your progress!",
+          scheduledDate: nudgeTime,
+        );
+        debugPrint(
+          '[Notifications] Scheduled inactivity nudge for $nudgeTime',
+        );
+      }
     }
   }
 
@@ -174,6 +281,36 @@ class NotificationService {
       notificationDetails: notificationDetails,
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
       matchDateTimeComponents: null, // one-shot, not repeating
+    );
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // Achievement Notification (instant, not scheduled)
+  // ──────────────────────────────────────────────────────────────────────────
+  static int _achievementIdCounter = 600;
+
+  Future<void> showAchievementNotification({
+    required String title,
+    required String body,
+  }) async {
+    const androidDetails = AndroidNotificationDetails(
+      'achievement_channel',
+      'Achievements',
+      channelDescription: 'Notifications for unlocked achievements',
+      importance: Importance.high,
+      priority: Priority.high,
+    );
+
+    const notificationDetails = NotificationDetails(
+      android: androidDetails,
+      iOS: DarwinNotificationDetails(),
+    );
+
+    await _plugin.show(
+      id: _achievementIdCounter++,
+      title: title,
+      body: body,
+      notificationDetails: notificationDetails,
     );
   }
 }

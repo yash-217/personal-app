@@ -28,6 +28,12 @@ class SleepLog extends HiveObject {
   @HiveField(7)
   final String? notes;
 
+  @HiveField(8)
+  final bool? morningErection;
+
+  @HiveField(9)
+  final bool? period;
+
   SleepLog({
     required this.id,
     required this.date,
@@ -37,6 +43,8 @@ class SleepLog extends HiveObject {
     this.quality = 5,
     this.mood,
     this.notes,
+    this.morningErection,
+    this.period,
   });
 
   /// Duration in minutes
@@ -58,6 +66,8 @@ class SleepLog extends HiveObject {
     int? quality,
     String? mood,
     String? notes,
+    bool? morningErection,
+    bool? period,
   }) {
     return SleepLog(
       id: id ?? this.id,
@@ -68,6 +78,8 @@ class SleepLog extends HiveObject {
       quality: quality ?? this.quality,
       mood: mood ?? this.mood,
       notes: notes ?? this.notes,
+      morningErection: morningErection ?? this.morningErection,
+      period: period ?? this.period,
     );
   }
 }

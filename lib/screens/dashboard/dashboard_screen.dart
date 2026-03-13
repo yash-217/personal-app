@@ -6,6 +6,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../../models/day_log.dart';
 import '../../providers/workout_provider.dart';
 import '../../providers/profile_provider.dart';
+import '../../providers/sleep_provider.dart';
 import '../../core/theme/app_colors.dart';
 import 'widgets/dashboard_stats_row.dart';
 import 'widgets/weekly_progress_card.dart';
@@ -83,9 +84,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
             // Calendar — scoped rebuild for workout data changes
             SliverToBoxAdapter(
-              child: Consumer<WorkoutProvider>(
-                builder: (context, workout, _) {
+              child: Consumer2<WorkoutProvider, SleepProvider>(
+                builder: (context, workout, sleep, _) {
                   final events = workout.getCalendarEvents();
+                  // Build a set of dates that have period == true
+                  final periodDates = <DateTime>{};
+                  for (final log in sleep.logs) {
+                    if (log.period == true) {
+                      periodDates.add(DateTime(
+                        log.date.year,
+                        log.date.month,
+                        log.date.day,
+                      ));
+                    }
+                  }
                   return Card(
                     margin: const EdgeInsets.all(16),
                     child: Padding(
@@ -122,7 +134,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             color: theme.colorScheme.primary,
                             fontWeight: FontWeight.bold,
                           ),
-                          markersMaxCount: 3,
+                          markersMaxCount: 4,
                         ),
                         calendarBuilders: CalendarBuilders(
                           markerBuilder: (context, date, _) {
@@ -132,38 +144,54 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               date.day,
                             );
                             final activities = events[normalized];
-                            if (activities == null || activities.isEmpty) {
+                            final hasPeriod = periodDates.contains(normalized);
+                            if ((activities == null || activities.isEmpty) && !hasPeriod) {
                               return null;
                             }
                             return Positioned(
                               bottom: 1,
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
-                                children: activities.map((type) {
-                                  Color color;
-                                  switch (type) {
-                                    case ActivityType.gym:
-                                      color = AppColors.gym;
-                                      break;
-                                    case ActivityType.run:
-                                      color = AppColors.run;
-                                      break;
-                                    case ActivityType.swim:
-                                      color = AppColors.swim;
-                                      break;
-                                  }
-                                  return Container(
-                                    margin: const EdgeInsets.symmetric(
-                                      horizontal: 1,
+                                children: [
+                                  if (activities != null)
+                                    ...activities.map((type) {
+                                      Color color;
+                                      switch (type) {
+                                        case ActivityType.gym:
+                                          color = AppColors.gym;
+                                          break;
+                                        case ActivityType.run:
+                                          color = AppColors.run;
+                                          break;
+                                        case ActivityType.swim:
+                                          color = AppColors.swim;
+                                          break;
+                                      }
+                                      return Container(
+                                        margin: const EdgeInsets.symmetric(
+                                          horizontal: 1,
+                                        ),
+                                        width: 7,
+                                        height: 7,
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: color,
+                                        ),
+                                      );
+                                    }),
+                                  if (hasPeriod)
+                                    Container(
+                                      margin: const EdgeInsets.symmetric(
+                                        horizontal: 1,
+                                      ),
+                                      width: 7,
+                                      height: 7,
+                                      decoration: const BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: Color(0xFFE91E63), // pink
+                                      ),
                                     ),
-                                    width: 7,
-                                    height: 7,
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      color: color,
-                                    ),
-                                  );
-                                }).toList(),
+                                ],
                               ),
                             );
                           },

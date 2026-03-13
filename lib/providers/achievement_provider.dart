@@ -5,6 +5,7 @@ import '../models/day_log.dart';
 import '../models/sleep_log.dart';
 import '../models/run_log.dart';
 import '../services/storage_service.dart';
+import '../services/notification_service.dart';
 
 /// Defines a badge that can be unlocked.
 class BadgeDefinition {
@@ -117,11 +118,57 @@ class AchievementProvider extends ChangeNotifier {
       category: 'recovery',
     ),
     BadgeDefinition(
+      id: 'sleep_quality_7',
+      emoji: '💤',
+      title: 'Sweet Dreams',
+      description: 'Avg sleep quality ≥ 5 for 7 consecutive days',
+      category: 'recovery',
+    ),
+    BadgeDefinition(
+      id: 'screen_free_7',
+      emoji: '📵',
+      title: 'Digital Detox',
+      description: 'Avoid screentime 7 days in a row',
+      category: 'recovery',
+    ),
+    BadgeDefinition(
+      id: 'sleep_8h_streak_5',
+      emoji: '🛌',
+      title: 'Full Rest',
+      description: 'Sleep 8+ hours for 5 consecutive days',
+      category: 'recovery',
+    ),
+    BadgeDefinition(
       id: 'early_bird',
       emoji: '🌅',
       title: 'Early Bird',
       description: '5 workouts logged before noon',
       category: 'consistency',
+    ),
+
+    // Endurance (additional)
+    BadgeDefinition(
+      id: 'run_10k',
+      emoji: '🏅',
+      title: '10K Finisher',
+      description: 'Run 10 km+ in a single session',
+      category: 'endurance',
+    ),
+    BadgeDefinition(
+      id: 'run_total_50k',
+      emoji: '🗺️',
+      title: 'Explorer',
+      description: '50 km total running distance',
+      category: 'endurance',
+    ),
+
+    // Volume (additional)
+    BadgeDefinition(
+      id: 'gym_100',
+      emoji: '💎',
+      title: 'Century Club',
+      description: '100 total gym sessions',
+      category: 'volume',
     ),
   ];
 
@@ -214,9 +261,18 @@ class AchievementProvider extends ChangeNotifier {
     final runDays = dayLogs.where((d) => d.hasRun).toList();
     if (runDays.isNotEmpty) await _tryUnlock('first_run');
 
-    // 5K in a single run
+    // 5K / 10K in a single run
     final has5k = runLogs.any((r) => r.distanceKm >= 5.0);
     if (has5k) await _tryUnlock('run_5k');
+    final has10k = runLogs.any((r) => r.distanceKm >= 10.0);
+    if (has10k) await _tryUnlock('run_10k');
+
+    // Total 50K running distance
+    final totalRunKm = runLogs.fold(0.0, (sum, r) => sum + r.distanceKm);
+    if (totalRunKm >= 50.0) await _tryUnlock('run_total_50k');
+
+    // --- Volume (additional) ---
+    if (gymDays.length >= 100) await _tryUnlock('gym_100');
 
     // --- Recovery ---
     if (sleepLogs.isNotEmpty) await _tryUnlock('first_sleep');
@@ -224,6 +280,18 @@ class AchievementProvider extends ChangeNotifier {
     // Sleep streak
     final sleepStreak = _calculateSleepStreak(sleepLogs);
     if (sleepStreak >= 7) await _tryUnlock('sleep_streak_7');
+
+    // Sweet Dreams: avg quality >= 5 for 7 consecutive days
+    final qualityStreak = _calculateQualityStreak(sleepLogs, 5, 7);
+    if (qualityStreak >= 7) await _tryUnlock('sleep_quality_7');
+
+    // Digital Detox: avoided screentime 7 days in a row
+    final screenStreak = _calculateScreenFreeStreak(sleepLogs);
+    if (screenStreak >= 7) await _tryUnlock('screen_free_7');
+
+    // Full Rest: 8+ hours for 5 consecutive days
+    final fullRestStreak = _calculateDurationStreak(sleepLogs, 480, 5);
+    if (fullRestStreak >= 5) await _tryUnlock('sleep_8h_streak_5');
 
     if (_newlyUnlocked.isNotEmpty) {
       notifyListeners();
@@ -244,6 +312,13 @@ class AchievementProvider extends ChangeNotifier {
     await _storage.saveAchievement(achievement);
     _achievements.add(achievement);
     _newlyUnlocked.add(badgeId);
+
+    // Fire an instant notification
+    final badge = allBadges.firstWhere((b) => b.id == badgeId);
+    NotificationService().showAchievementNotification(
+      title: '🏆 Achievement Unlocked!',
+      body: '${badge.emoji} ${badge.title} — ${badge.description}',
+    );
   }
 
   /// Calculate the best / current consecutive gym-day streak.
@@ -299,5 +374,62 @@ class AchievementProvider extends ChangeNotifier {
     }
 
     return streak;
+  }
+
+  /// Consecutive days where avg quality >= [minQuality], returns max streak.
+  int _calculateQualityStreak(List<SleepLog> logs, int minQuality, int target) {
+    if (logs.isEmpty) return 0;
+    final sorted = List<SleepLog>.from(logs)
+      ..sort((a, b) => a.date.compareTo(b.date));
+
+    int streak = 0;
+    int best = 0;
+    for (final log in sorted) {
+      if (log.quality >= minQuality) {
+        streak++;
+        if (streak > best) best = streak;
+      } else {
+        streak = 0;
+      }
+    }
+    return best;
+  }
+
+  /// Consecutive days where screentime was avoided.
+  int _calculateScreenFreeStreak(List<SleepLog> logs) {
+    if (logs.isEmpty) return 0;
+    final sorted = List<SleepLog>.from(logs)
+      ..sort((a, b) => a.date.compareTo(b.date));
+
+    int streak = 0;
+    int best = 0;
+    for (final log in sorted) {
+      if (log.avoidedScreentime) {
+        streak++;
+        if (streak > best) best = streak;
+      } else {
+        streak = 0;
+      }
+    }
+    return best;
+  }
+
+  /// Consecutive days where sleep duration >= [minMinutes].
+  int _calculateDurationStreak(List<SleepLog> logs, int minMinutes, int target) {
+    if (logs.isEmpty) return 0;
+    final sorted = List<SleepLog>.from(logs)
+      ..sort((a, b) => a.date.compareTo(b.date));
+
+    int streak = 0;
+    int best = 0;
+    for (final log in sorted) {
+      if (log.durationMinutes >= minMinutes) {
+        streak++;
+        if (streak > best) best = streak;
+      } else {
+        streak = 0;
+      }
+    }
+    return best;
   }
 }
