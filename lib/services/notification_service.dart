@@ -110,9 +110,9 @@ class NotificationService {
       // Cancel only the IDs for the dates we're about to re-evaluate.
       // Already-fired notifications are no-ops; notifications for other
       // dates that were scheduled on previous app launches are untouched.
-      await _plugin.cancel(sleepId);
-      await _plugin.cancel(activityId);
-      await _plugin.cancel(windDownId);
+      await _plugin.cancel(id: sleepId);
+      await _plugin.cancel(id: activityId);
+      await _plugin.cancel(id: windDownId);
 
       // ── 1. Morning Sleep Reminder @ 9 AM ──
       final hasSleepLog = sleepLogs.any(
@@ -196,11 +196,11 @@ class NotificationService {
     }
 
     // ── 4. Weekly Check-in – Next Sunday @ 10 AM ──
-    await _plugin.cancel(_weeklyCheckInId);
+    await _plugin.cancel(id: _weeklyCheckInId);
     _scheduleWeeklyCheckIn(now);
 
     // ── 5. Inactivity Nudge – 3 days from now if no recent data ──
-    await _plugin.cancel(_inactivityId);
+    await _plugin.cancel(id: _inactivityId);
     _scheduleInactivityNudge(now, sleepLogs, dayLogs);
   }
 
