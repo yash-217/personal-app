@@ -14,16 +14,21 @@ class NotificationService {
       FlutterLocalNotificationsPlugin();
 
   // ── Notification ID ranges ──
-  // Sleep reminders:      100-106  (one per day for 7 days)
-  // Activity reminders:   200-206
-  // Wind-down reminders:  300-306
-  // Weekly check-in:      400
-  // Inactivity nudge:     500
-  static const int _sleepBaseId = 100;
-  static const int _activityBaseId = 200;
-  static const int _windDownBaseId = 300;
-  static const int _weeklyCheckInId = 400;
-  static const int _inactivityId = 500;
+  // IDs are date-stable: baseId + dayOfYear (0-365).
+  // This prevents a cancelAll()-style wipe from destroying a pending
+  // notification that was scheduled on a previous app launch.
+  //
+  // Sleep reminders:      1000 + dayOfYear
+  // Activity reminders:   2000 + dayOfYear
+  // Wind-down reminders:  3000 + dayOfYear
+  // Weekly check-in:      4000
+  // Inactivity nudge:     5000
+  // Achievements:         6000+
+  static const int _sleepBaseId = 1000;
+  static const int _activityBaseId = 2000;
+  static const int _windDownBaseId = 3000;
+  static const int _weeklyCheckInId = 4000;
+  static const int _inactivityId = 5000;
 
   /// Android notification channels
   static const _channelId = 'daily_reminders';
@@ -79,13 +84,13 @@ class NotificationService {
   // ──────────────────────────────────────────────────────────────────────────
 
   /// Reschedule all notifications based on current data.
+  ///
+  /// Uses targeted cancellation instead of cancelAll() so that
+  /// already-pending notifications for other dates are preserved.
   Future<void> rescheduleNotifications({
     required List<SleepLog> sleepLogs,
     required List<DayLog> dayLogs,
   }) async {
-    // Cancel everything first so we always have a clean slate
-    await _plugin.cancelAll();
-
     final now = tz.TZDateTime.now(tz.local);
 
     for (int i = 0; i < 7; i++) {
@@ -95,6 +100,19 @@ class NotificationService {
         targetDate.month,
         targetDate.day,
       );
+      final dayOfYear =
+          dateOnly.difference(DateTime(dateOnly.year, 1, 1)).inDays;
+
+      final sleepId = _sleepBaseId + dayOfYear;
+      final activityId = _activityBaseId + dayOfYear;
+      final windDownId = _windDownBaseId + dayOfYear;
+
+      // Cancel only the IDs for the dates we're about to re-evaluate.
+      // Already-fired notifications are no-ops; notifications for other
+      // dates that were scheduled on previous app launches are untouched.
+      await _plugin.cancel(sleepId);
+      await _plugin.cancel(activityId);
+      await _plugin.cancel(windDownId);
 
       // ── 1. Morning Sleep Reminder @ 9 AM ──
       final hasSleepLog = sleepLogs.any(
@@ -114,7 +132,7 @@ class NotificationService {
         );
         if (sleepTime.isAfter(now)) {
           await _scheduleNotification(
-            id: _sleepBaseId + i,
+            id: sleepId,
             title: '😴 Log your sleep',
             body: 'How did you sleep last night? Tap to log it.',
             scheduledDate: sleepTime,
@@ -145,7 +163,7 @@ class NotificationService {
         );
         if (activityTime.isAfter(now)) {
           await _scheduleNotification(
-            id: _activityBaseId + i,
+            id: activityId,
             title: '💪 Log your activity',
             body: "Did you work out today? Don't forget to track it!",
             scheduledDate: activityTime,
@@ -166,7 +184,7 @@ class NotificationService {
       );
       if (windDownTime.isAfter(now)) {
         await _scheduleNotification(
-          id: _windDownBaseId + i,
+          id: windDownId,
           title: '🌙 Time to wind down',
           body: 'Put your screens away for better sleep tonight.',
           scheduledDate: windDownTime,
@@ -178,9 +196,11 @@ class NotificationService {
     }
 
     // ── 4. Weekly Check-in – Next Sunday @ 10 AM ──
+    await _plugin.cancel(_weeklyCheckInId);
     _scheduleWeeklyCheckIn(now);
 
     // ── 5. Inactivity Nudge – 3 days from now if no recent data ──
+    await _plugin.cancel(_inactivityId);
     _scheduleInactivityNudge(now, sleepLogs, dayLogs);
   }
 
@@ -279,7 +299,7 @@ class NotificationService {
       body: body,
       scheduledDate: scheduledDate,
       notificationDetails: notificationDetails,
-      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
       matchDateTimeComponents: null, // one-shot, not repeating
     );
   }
@@ -287,7 +307,7 @@ class NotificationService {
   // ──────────────────────────────────────────────────────────────────────────
   // Achievement Notification (instant, not scheduled)
   // ──────────────────────────────────────────────────────────────────────────
-  static int _achievementIdCounter = 600;
+  static int _achievementIdCounter = 6000;
 
   Future<void> showAchievementNotification({
     required String title,

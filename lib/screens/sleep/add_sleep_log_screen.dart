@@ -17,7 +17,8 @@ class _AddSleepLogScreenState extends State<AddSleepLogScreen> {
   TimeOfDay _bedtime = const TimeOfDay(hour: 22, minute: 30);
   TimeOfDay _wakeTime = const TimeOfDay(hour: 7, minute: 0);
   bool _avoidedScreentime = false;
-  bool _sexSpecificToggle = false;
+  bool _periodToggle = false;
+  int _meRating = 0;
   double _quality = 5;
   String? _selectedMood;
   final TextEditingController _notesController = TextEditingController();
@@ -132,8 +133,8 @@ class _AddSleepLogScreenState extends State<AddSleepLogScreen> {
       quality: _quality.round(),
       mood: _selectedMood,
       notes: _notesController.text.isEmpty ? null : _notesController.text,
-      morningErection: gender == 'Male' ? _sexSpecificToggle : null,
-      period: gender == 'Female' ? _sexSpecificToggle : null,
+      morningErection: gender == 'Male' ? _meRating : null,
+      period: gender == 'Female' ? _periodToggle : null,
     );
 
     Navigator.pop(context);
@@ -200,21 +201,42 @@ class _AddSleepLogScreenState extends State<AddSleepLogScreen> {
                 final gender =
                     context.watch<ProfileProvider>().profile?.gender ?? '';
                 if (gender == 'Male') {
-                  return SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Morning Erection?'),
-                    value: _sexSpecificToggle,
-                    onChanged: (val) =>
-                        setState(() => _sexSpecificToggle = val),
-                    activeTrackColor: AppColors.seed,
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildSectionTitle('Morning Erection: $_meRating/5'),
+                      Row(
+                        children: List.generate(5, (i) {
+                          final starIndex = i + 1;
+                          return IconButton(
+                            icon: Icon(
+                              starIndex <= _meRating
+                                  ? Icons.star_rounded
+                                  : Icons.star_outline_rounded,
+                              color: starIndex <= _meRating
+                                  ? Colors.amber
+                                  : Theme.of(context).colorScheme.outline,
+                              size: 32,
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                // Tap same star to deselect
+                                _meRating =
+                                    _meRating == starIndex ? 0 : starIndex;
+                              });
+                            },
+                          );
+                        }),
+                      ),
+                    ],
                   );
                 } else if (gender == 'Female') {
                   return SwitchListTile(
                     contentPadding: EdgeInsets.zero,
                     title: const Text('Period?'),
-                    value: _sexSpecificToggle,
+                    value: _periodToggle,
                     onChanged: (val) =>
-                        setState(() => _sexSpecificToggle = val),
+                        setState(() => _periodToggle = val),
                     activeTrackColor: AppColors.seed,
                   );
                 }

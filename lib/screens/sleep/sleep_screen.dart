@@ -370,7 +370,7 @@ class SleepScreen extends StatelessWidget {
                   Text(timeFormat.format(log.wakeTime)),
                 ],
               ),
-              if (log.notes != null || log.mood != null || log.morningErection == true) ...[
+              if (log.notes != null || log.mood != null || (log.morningErection != null && log.morningErection! > 0)) ...[
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 6,
@@ -386,13 +386,13 @@ class SleepScreen extends StatelessWidget {
                             .surfaceContainerHighest
                             .withValues(alpha: 0.5),
                       ),
-                    if (log.morningErection == true)
+                    if (log.morningErection != null && log.morningErection! > 0)
                       Chip(
-                        avatar: const Icon(Icons.check_circle, size: 14, color: Colors.green),
-                        label: const Text('ME'),
+                        avatar: const Icon(Icons.star_rounded, size: 14, color: Colors.amber),
+                        label: Text('ME ${log.morningErection}/5'),
                         visualDensity: VisualDensity.compact,
                         materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        backgroundColor: Colors.green.withValues(alpha: 0.1),
+                        backgroundColor: Colors.amber.withValues(alpha: 0.1),
                       ),
                   ],
                 ),

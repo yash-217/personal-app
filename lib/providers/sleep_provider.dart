@@ -55,7 +55,7 @@ class SleepProvider extends ChangeNotifier {
     int quality = 5,
     String? mood,
     String? notes,
-    bool? morningErection,
+    int? morningErection,
     bool? period,
   }) async {
     final log = SleepLog(

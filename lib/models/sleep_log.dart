@@ -29,7 +29,7 @@ class SleepLog extends HiveObject {
   final String? notes;
 
   @HiveField(8)
-  final bool? morningErection;
+  final int? morningErection; // 0-5 rating (null if not applicable)
 
   @HiveField(9)
   final bool? period;
@@ -66,7 +66,7 @@ class SleepLog extends HiveObject {
     int? quality,
     String? mood,
     String? notes,
-    bool? morningErection,
+    int? morningErection,
     bool? period,
   }) {
     return SleepLog(
