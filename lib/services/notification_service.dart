@@ -13,6 +13,10 @@ class NotificationService {
   final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
 
+  /// Whether the user has granted exact-alarm permission.
+  /// When false, we fall back to inexact scheduling.
+  bool _canScheduleExact = true;
+
   // ── Notification ID ranges ──
   // IDs are date-stable: baseId + dayOfYear (0-365).
   // This prevents a cancelAll()-style wipe from destroying a pending
@@ -54,7 +58,11 @@ class NotificationService {
       iOS: iosSettings,
     );
 
-    await _plugin.initialize(settings: initSettings);
+    try {
+      await _plugin.initialize(settings: initSettings);
+    } catch (e, st) {
+      debugPrint('[Notifications] init() failed: $e\n$st');
+    }
     await _requestPermissions();
   }
 
@@ -65,8 +73,25 @@ class NotificationService {
           AndroidFlutterLocalNotificationsPlugin
         >();
     if (android != null) {
-      await android.requestNotificationsPermission();
-      await android.requestExactAlarmsPermission();
+      try {
+        await android.requestNotificationsPermission();
+      } catch (e) {
+        debugPrint('[Notifications] requestNotificationsPermission failed: $e');
+      }
+
+      try {
+        final exactGranted = await android.requestExactAlarmsPermission();
+        _canScheduleExact = exactGranted ?? false;
+        if (!_canScheduleExact) {
+          debugPrint(
+            '[Notifications] Exact alarm permission denied — '
+            'falling back to inexact scheduling',
+          );
+        }
+      } catch (e) {
+        debugPrint('[Notifications] requestExactAlarmsPermission failed: $e');
+        _canScheduleExact = false;
+      }
     }
 
     // iOS permission
@@ -75,7 +100,11 @@ class NotificationService {
           IOSFlutterLocalNotificationsPlugin
         >();
     if (ios != null) {
-      await ios.requestPermissions(alert: true, badge: true, sound: true);
+      try {
+        await ios.requestPermissions(alert: true, badge: true, sound: true);
+      } catch (e) {
+        debugPrint('[Notifications] iOS requestPermissions failed: $e');
+      }
     }
   }
 
@@ -100,8 +129,9 @@ class NotificationService {
         targetDate.month,
         targetDate.day,
       );
-      final dayOfYear =
-          dateOnly.difference(DateTime(dateOnly.year, 1, 1)).inDays;
+      final dayOfYear = dateOnly
+          .difference(DateTime(dateOnly.year, 1, 1))
+          .inDays;
 
       final sleepId = _sleepBaseId + dayOfYear;
       final activityId = _activityBaseId + dayOfYear;
@@ -110,9 +140,9 @@ class NotificationService {
       // Cancel only the IDs for the dates we're about to re-evaluate.
       // Already-fired notifications are no-ops; notifications for other
       // dates that were scheduled on previous app launches are untouched.
-      await _plugin.cancel(id: sleepId);
-      await _plugin.cancel(id: activityId);
-      await _plugin.cancel(id: windDownId);
+      await _cancelSafe(sleepId);
+      await _cancelSafe(activityId);
+      await _cancelSafe(windDownId);
 
       // ── 1. Morning Sleep Reminder @ 9 AM ──
       final hasSleepLog = sleepLogs.any(
@@ -196,19 +226,28 @@ class NotificationService {
     }
 
     // ── 4. Weekly Check-in – Next Sunday @ 10 AM ──
-    await _plugin.cancel(id: _weeklyCheckInId);
-    _scheduleWeeklyCheckIn(now);
+    await _cancelSafe(_weeklyCheckInId);
+    await _scheduleWeeklyCheckIn(now);
 
     // ── 5. Inactivity Nudge – 3 days from now if no recent data ──
-    await _plugin.cancel(id: _inactivityId);
-    _scheduleInactivityNudge(now, sleepLogs, dayLogs);
+    await _cancelSafe(_inactivityId);
+    await _scheduleInactivityNudge(now, sleepLogs, dayLogs);
   }
 
   // ──────────────────────────────────────────────────────────────────────────
   // Private helpers
   // ──────────────────────────────────────────────────────────────────────────
 
-  void _scheduleWeeklyCheckIn(tz.TZDateTime now) {
+  /// Cancel a notification by ID, swallowing any platform errors.
+  Future<void> _cancelSafe(int id) async {
+    try {
+      await _plugin.cancel(id: id);
+    } catch (e) {
+      debugPrint('[Notifications] cancel($id) failed: $e');
+    }
+  }
+
+  Future<void> _scheduleWeeklyCheckIn(tz.TZDateTime now) async {
     // Find the next Sunday
     int daysUntilSunday = DateTime.sunday - now.weekday;
     if (daysUntilSunday <= 0) daysUntilSunday += 7;
@@ -222,29 +261,25 @@ class NotificationService {
     );
 
     if (nextSunday.isAfter(now)) {
-      _scheduleNotification(
+      await _scheduleNotification(
         id: _weeklyCheckInId,
         title: '📊 Weekly Review',
         body: 'Check your progress on your weekly goals!',
         scheduledDate: nextSunday,
       );
-      debugPrint(
-        '[Notifications] Scheduled weekly check-in for $nextSunday',
-      );
+      debugPrint('[Notifications] Scheduled weekly check-in for $nextSunday');
     }
   }
 
-  void _scheduleInactivityNudge(
+  Future<void> _scheduleInactivityNudge(
     tz.TZDateTime now,
     List<SleepLog> sleepLogs,
     List<DayLog> dayLogs,
-  ) {
+  ) async {
     // Check if user has logged anything in the last 2 days
     final twoDaysAgo = now.subtract(const Duration(days: 2));
 
-    final hasRecentSleep = sleepLogs.any(
-      (log) => log.date.isAfter(twoDaysAgo),
-    );
+    final hasRecentSleep = sleepLogs.any((log) => log.date.isAfter(twoDaysAgo));
     final hasRecentActivity = dayLogs.any(
       (log) => log.date.isAfter(twoDaysAgo),
     );
@@ -261,15 +296,14 @@ class NotificationService {
       );
 
       if (nudgeTime.isAfter(now)) {
-        _scheduleNotification(
+        await _scheduleNotification(
           id: _inactivityId,
           title: '👋 We miss you!',
-          body: "You haven't logged anything recently. Come track your progress!",
+          body:
+              "You haven't logged anything recently. Come track your progress!",
           scheduledDate: nudgeTime,
         );
-        debugPrint(
-          '[Notifications] Scheduled inactivity nudge for $nudgeTime',
-        );
+        debugPrint('[Notifications] Scheduled inactivity nudge for $nudgeTime');
       }
     }
   }
@@ -293,15 +327,24 @@ class NotificationService {
       iOS: DarwinNotificationDetails(),
     );
 
-    await _plugin.zonedSchedule(
-      id: id,
-      title: title,
-      body: body,
-      scheduledDate: scheduledDate,
-      notificationDetails: notificationDetails,
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      matchDateTimeComponents: null, // one-shot, not repeating
-    );
+    // Choose schedule mode based on whether exact alarms are permitted.
+    final scheduleMode = _canScheduleExact
+        ? AndroidScheduleMode.exactAllowWhileIdle
+        : AndroidScheduleMode.inexactAllowWhileIdle;
+
+    try {
+      await _plugin.zonedSchedule(
+        id: id,
+        title: title,
+        body: body,
+        scheduledDate: scheduledDate,
+        notificationDetails: notificationDetails,
+        androidScheduleMode: scheduleMode,
+        matchDateTimeComponents: null, // one-shot, not repeating
+      );
+    } catch (e, st) {
+      debugPrint('[Notifications] zonedSchedule($id) failed: $e\n$st');
+    }
   }
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -326,11 +369,15 @@ class NotificationService {
       iOS: DarwinNotificationDetails(),
     );
 
-    await _plugin.show(
-      id: _achievementIdCounter++,
-      title: title,
-      body: body,
-      notificationDetails: notificationDetails,
-    );
+    try {
+      await _plugin.show(
+        id: _achievementIdCounter++,
+        title: title,
+        body: body,
+        notificationDetails: notificationDetails,
+      );
+    } catch (e, st) {
+      debugPrint('[Notifications] show() achievement failed: $e\n$st');
+    }
   }
 }

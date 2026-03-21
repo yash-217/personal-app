@@ -10,6 +10,7 @@ import 'services/storage_service.dart';
 import 'services/exercise_api_service.dart';
 import 'services/notification_service.dart';
 import 'services/auth_service.dart';
+import 'services/cloud_sync_service.dart';
 import 'providers/theme_provider.dart';
 import 'providers/workout_provider.dart';
 import 'providers/exercise_provider.dart';
@@ -75,6 +76,9 @@ void main() async {
 
   // Auth service
   final authService = AuthService();
+
+  // Trigger weekly auto-backup (fire-and-forget, non-blocking)
+  CloudSyncService(storage).autoBackupIfNeeded();
 
   runApp(
     MultiProvider(

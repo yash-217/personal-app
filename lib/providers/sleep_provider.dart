@@ -28,11 +28,15 @@ class SleepProvider extends ChangeNotifier {
     _achievementProvider = provider;
   }
 
-  void _rescheduleNotifications() {
-    NotificationService().rescheduleNotifications(
-      sleepLogs: _logs,
-      dayLogs: _workoutProvider?.dayLogs ?? [],
-    );
+  Future<void> _rescheduleNotifications() async {
+    try {
+      await NotificationService().rescheduleNotifications(
+        sleepLogs: _logs,
+        dayLogs: _workoutProvider?.dayLogs ?? [],
+      );
+    } catch (e) {
+      debugPrint('[SleepProvider] rescheduleNotifications failed: $e');
+    }
     _achievementProvider?.evaluate(
       dayLogs: _workoutProvider?.dayLogs ?? [],
       sleepLogs: _logs,

@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'storage_service.dart';
 
 /// Service to backup and restore all local Hive data to/from Firebase Firestore.
@@ -10,6 +11,47 @@ class CloudSyncService {
   CloudSyncService(this._storage);
 
   String? get _uid => FirebaseAuth.instance.currentUser?.uid;
+
+  static const String _lastAutoBackupKey = 'lastAutoBackupMillis';
+  static const int _autoBackupIntervalDays = 7;
+
+  /// Performs a backup if the user is signed in and 7+ days have passed
+  /// since the last auto-backup. Runs silently — does not throw.
+  Future<void> autoBackupIfNeeded() async {
+    try {
+      final uid = _uid;
+      if (uid == null) {
+        debugPrint('[AutoBackup] Skipped — user not signed in');
+        return;
+      }
+
+      final lastMillis = _storage.settingsBox.get(_lastAutoBackupKey) as int?;
+      final now = DateTime.now();
+
+      if (lastMillis != null) {
+        final lastBackup = DateTime.fromMillisecondsSinceEpoch(lastMillis);
+        final daysSince = now.difference(lastBackup).inDays;
+        if (daysSince < _autoBackupIntervalDays) {
+          debugPrint('[AutoBackup] Skipped — last backup was $daysSince day(s) ago');
+          return;
+        }
+      }
+
+      debugPrint('[AutoBackup] Starting weekly auto-backup...');
+      final counts = await backup();
+      await _storage.settingsBox.put(_lastAutoBackupKey, now.millisecondsSinceEpoch);
+      debugPrint('[AutoBackup] Complete: $counts');
+    } catch (e, st) {
+      debugPrint('[AutoBackup] Failed (non-fatal): $e\n$st');
+    }
+  }
+
+  /// Returns the last auto-backup time, or null if never backed up automatically.
+  DateTime? get lastAutoBackupTime {
+    final millis = _storage.settingsBox.get(_lastAutoBackupKey) as int?;
+    if (millis == null) return null;
+    return DateTime.fromMillisecondsSinceEpoch(millis);
+  }
 
   /// Upload all local data to Firestore under users/{uid}/
   Future<Map<String, int>> backup() async {
@@ -163,10 +205,14 @@ class CloudSyncService {
     await userDoc.set({'achievements': achievements}, SetOptions(merge: true));
     counts['achievements'] = achievements.length;
 
-    // Store backup timestamp
+    // Store backup timestamp (remote + local auto-backup timer)
     await userDoc.set({
       'lastBackup': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
+    await _storage.settingsBox.put(
+      _lastAutoBackupKey,
+      DateTime.now().millisecondsSinceEpoch,
+    );
 
     return counts;
   }

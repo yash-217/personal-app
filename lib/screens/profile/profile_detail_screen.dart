@@ -6,6 +6,7 @@ import '../../providers/theme_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/data_export_service.dart';
 import '../../services/cloud_sync_service.dart';
+import 'package:intl/intl.dart';
 import 'widgets/edit_profile_dialog.dart';
 
 class ProfileDetailScreen extends StatefulWidget {
@@ -248,6 +249,24 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
                     ),
                     title: Text(authProvider.displayName ?? 'Google User'),
                     subtitle: Text(authProvider.email ?? ''),
+                  ),
+                  const Divider(height: 1),
+                  Builder(
+                    builder: (ctx) {
+                      final storage = ctx.read<ProfileProvider>().storage;
+                      final lastAutoBackup =
+                          CloudSyncService(storage).lastAutoBackupTime;
+                      final label = lastAutoBackup != null
+                          ? DateFormat.yMMMd().add_jm().format(lastAutoBackup)
+                          : 'Not yet';
+                      return ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.autorenew_rounded),
+                        title: const Text('Weekly Auto-Backup'),
+                        subtitle: Text('Last: $label'),
+                        dense: true,
+                      );
+                    },
                   ),
                   const Divider(height: 1),
                   ListTile(
