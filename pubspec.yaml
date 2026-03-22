@@ -1,7 +1,7 @@
 name: fitprint
 description: "FitPrint — your personal fitness tracker with exercise library, workout sessions, run tracking, and body metrics."
 publish_to: 'none'
-version: 1.0.0+1
+version: 1.4.4+8
 
 environment:
   sdk: ^3.10.7
@@ -46,6 +46,7 @@ dependencies:
   # Notifications
   flutter_local_notifications: any
   timezone: any
+  flutter_timezone: any
 
   # Utilities
   uuid: any

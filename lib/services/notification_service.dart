@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 import '../models/sleep_log.dart';
@@ -42,6 +43,18 @@ class NotificationService {
 
   Future<void> init() async {
     tz.initializeTimeZones();
+
+    // Detect the device's local timezone so tz.local resolves correctly.
+    // Without this, tz.local defaults to UTC.
+    try {
+      final timezoneName = await FlutterTimezone.getLocalTimezone();
+      tz.setLocalLocation(tz.getLocation(timezoneName.toString()));
+      debugPrint('[Notifications] Device timezone: $timezoneName');
+    } catch (e) {
+      debugPrint(
+        '[Notifications] Could not detect timezone: $e — defaulting to UTC',
+      );
+    }
 
     const androidSettings = AndroidInitializationSettings(
       '@mipmap/ic_launcher',
@@ -121,6 +134,12 @@ class NotificationService {
     required List<DayLog> dayLogs,
   }) async {
     final now = tz.TZDateTime.now(tz.local);
+
+    // Compute wind-down time once (same for every day in the 7-day window).
+    final avgBedtimeMin = _averageBedtimeMinutes(sleepLogs, now);
+    final windDownMin = avgBedtimeMin - 60;
+    final windDownHour = (windDownMin ~/ 60) % 24;
+    final windDownMinute = windDownMin % 60;
 
     for (int i = 0; i < 7; i++) {
       final targetDate = now.add(Duration(days: i));
@@ -204,14 +223,21 @@ class NotificationService {
         }
       }
 
-      // ── 3. Wind-Down Reminder @ 10 PM ──
-      final windDownTime = tz.TZDateTime(
+      // ── 3. Wind-Down Reminder – 1 h before avg bedtime (default 10 PM) ──
+
+      var windDownTime = tz.TZDateTime(
         tz.local,
         dateOnly.year,
         dateOnly.month,
         dateOnly.day,
-        22, // 10 PM
+        windDownHour,
+        windDownMinute,
       );
+      // If the computed time is before noon, it likely wrapped past midnight;
+      // push it to the next calendar day.
+      if (windDownHour < 12) {
+        windDownTime = windDownTime.add(const Duration(days: 1));
+      }
       if (windDownTime.isAfter(now)) {
         await _scheduleNotification(
           id: windDownId,
@@ -245,6 +271,37 @@ class NotificationService {
     } catch (e) {
       debugPrint('[Notifications] cancel($id) failed: $e');
     }
+  }
+
+  /// Returns the average bedtime as minutes since midnight (can be >1440 for
+  /// past-midnight bedtimes, e.g. 1:30 AM → 25*60+30 = 1530).
+  /// Falls back to 22*60 (10 PM) if fewer than 2 logs in the past 7 days.
+  int _averageBedtimeMinutes(List<SleepLog> sleepLogs, tz.TZDateTime now) {
+    const defaultMinutes = 22 * 60; // 10 PM
+
+    final sevenDaysAgo = now.subtract(const Duration(days: 7));
+    final recentLogs = sleepLogs
+        .where((log) => log.bedtime.isAfter(sevenDaysAgo))
+        .toList();
+
+    if (recentLogs.length < 2) return defaultMinutes;
+
+    // Normalise each bedtime to minutes-since-noon so that both 11 PM and
+    // 1 AM cluster together (instead of wrapping around midnight).
+    int totalMinutes = 0;
+    for (final log in recentLogs) {
+      int mins = log.bedtime.hour * 60 + log.bedtime.minute;
+      // Treat times before 6 AM as "previous evening" (add 24 h)
+      if (mins < 6 * 60) mins += 24 * 60;
+      totalMinutes += mins;
+    }
+
+    final avg = totalMinutes ~/ recentLogs.length;
+    debugPrint(
+      '[Notifications] Average bedtime from ${recentLogs.length} logs: '
+      '${avg ~/ 60}:${(avg % 60).toString().padLeft(2, '0')}',
+    );
+    return avg;
   }
 
   Future<void> _scheduleWeeklyCheckIn(tz.TZDateTime now) async {
