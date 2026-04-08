@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../../core/theme/app_colors.dart';
+import '../../models/sleep_log.dart';
 import '../../providers/profile_provider.dart';
 import '../../providers/sleep_provider.dart';
 
 class AddSleepLogScreen extends StatefulWidget {
-  const AddSleepLogScreen({super.key});
+  final SleepLog? existingLog;
+
+  const AddSleepLogScreen({super.key, this.existingLog});
 
   @override
   State<AddSleepLogScreen> createState() => _AddSleepLogScreenState();
@@ -23,6 +26,8 @@ class _AddSleepLogScreenState extends State<AddSleepLogScreen> {
   String? _selectedMood;
   final TextEditingController _notesController = TextEditingController();
 
+  bool get _isEditing => widget.existingLog != null;
+
   final List<String> _moods = [
     'Rested',
     'Groggy',
@@ -31,6 +36,23 @@ class _AddSleepLogScreenState extends State<AddSleepLogScreen> {
     'Anxious',
     'Calm',
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.existingLog != null) {
+      final log = widget.existingLog!;
+      _date = log.date;
+      _bedtime = TimeOfDay.fromDateTime(log.bedtime);
+      _wakeTime = TimeOfDay.fromDateTime(log.wakeTime);
+      _avoidedScreentime = log.avoidedScreentime;
+      _quality = log.quality.toDouble();
+      _selectedMood = log.mood;
+      _notesController.text = log.notes ?? '';
+      _meRating = log.morningErection ?? 0;
+      _periodToggle = log.period ?? false;
+    }
+  }
 
   @override
   void dispose() {
@@ -70,72 +92,46 @@ class _AddSleepLogScreenState extends State<AddSleepLogScreen> {
   }
 
   void _save() {
-    // Calculate actual datetimes
-    // Bedtime is usually the night before the wake date
-    // If bedtime hour is late (e.g. 22:00) and wake time is early (e.g. 07:00),
-    // then bedtime is on (date - 1 day).
-    // If bedtime is early morning (e.g. 01:00) and wake time is later (e.g. 09:00),
-    // then bedtime is on the same day.
-
-    // Simple logic: if bedtime > wakeTime, assume bedtime was yesterday
-    // This logic is tricky. Let's assume the user enters the "Sleep Date" as the night they went to bed?
-    // Or "Wake Date" as the morning they woke up?
-    // The SleepLog model says "date: (The day the user woke up)".
-
-    // So if I wake up on Oct 25th at 7am, date is Oct 25th.
-    // Bedtime was likely Oct 24th 10pm.
-
     DateTime wakeDt = _combineDateAndTime(_date, _wakeTime);
     DateTime bedDt = _combineDateAndTime(_date, _bedtime);
 
-    // If bedtime is after wake time (e.g. bed 22:00, wake 07:00), subtract a day from bedtime
-    // Wait, comparing just times isn't enough.
-    // Let's assume standard sleep schedule: Bedtime is usually PM, Wake is AM.
-    // Or Bedtime AM (post-midnight), Wake AM (later).
-
-    // If wake time is earlier in the day than bedtime, then bedtime must be previous day.
-    // Example: Bed 23:00, Wake 07:00 -> Bed is previous day.
-    // Example: Bed 01:00, Wake 09:00 -> Both same day.
-
-    // Heuristic: If bedtime hour > wake time hour + 12 (allowing for long sleep), it's previous day?
-    // Better: If (bedtime hour >= 12 and wake time hour < 12) -> previous day.
-    // This covers standard 10pm -> 7am.
-
     if (_bedtime.hour > _wakeTime.hour + 8) {
-      // Heuristic
       bedDt = bedDt.subtract(const Duration(days: 1));
     }
-
-    // If the calculation results in negative duration, we probably guessed wrong or user entered weird times.
-    // But `difference` handles dates correctly.
-    // Let's refine:
-    // User enters "Wake Date" (The date of the log).
-    // User enters Bedtime (Time) and Wake Time (Time).
-    // We construct WakeDateTime = WakeDate + WakeTime.
-    // We construct BedDateTime = WakeDate + BedTime.
-    // If BedDateTime > WakeDateTime, subtract 1 day from BedDateTime.
 
     if (bedDt.isAfter(wakeDt)) {
       bedDt = bedDt.subtract(const Duration(days: 1));
     }
 
-    // One edge case: Nap? Bed 14:00, Wake 15:00.
-    // Above logic: BedDt < WakeDt, so it keeps same day. Correct.
-
     final gender =
         context.read<ProfileProvider>().profile?.gender ?? '';
 
-    context.read<SleepProvider>().addLog(
-      date: _date,
-      bedtime: bedDt,
-      wakeTime: wakeDt,
-      avoidedScreentime: _avoidedScreentime,
-      quality: _quality.round(),
-      mood: _selectedMood,
-      notes: _notesController.text.isEmpty ? null : _notesController.text,
-      morningErection: gender == 'Male' ? _meRating : null,
-      period: gender == 'Female' ? _periodToggle : null,
-    );
+    if (_isEditing) {
+      final updated = widget.existingLog!.copyWith(
+        date: _date,
+        bedtime: bedDt,
+        wakeTime: wakeDt,
+        avoidedScreentime: _avoidedScreentime,
+        quality: _quality.round(),
+        mood: _selectedMood,
+        notes: _notesController.text.isEmpty ? null : _notesController.text,
+        morningErection: gender == 'Male' ? _meRating : null,
+        period: gender == 'Female' ? _periodToggle : null,
+      );
+      context.read<SleepProvider>().updateLog(updated);
+    } else {
+      context.read<SleepProvider>().addLog(
+        date: _date,
+        bedtime: bedDt,
+        wakeTime: wakeDt,
+        avoidedScreentime: _avoidedScreentime,
+        quality: _quality.round(),
+        mood: _selectedMood,
+        notes: _notesController.text.isEmpty ? null : _notesController.text,
+        morningErection: gender == 'Male' ? _meRating : null,
+        period: gender == 'Female' ? _periodToggle : null,
+      );
+    }
 
     Navigator.pop(context);
   }
@@ -144,7 +140,7 @@ class _AddSleepLogScreenState extends State<AddSleepLogScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Add Sleep Log'),
+        title: Text(_isEditing ? 'Edit Sleep Log' : 'Add Sleep Log'),
         actions: [IconButton(icon: const Icon(Icons.check), onPressed: _save)],
       ),
       body: SingleChildScrollView(

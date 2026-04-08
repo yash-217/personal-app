@@ -11,7 +11,9 @@ import '../../core/theme/app_colors.dart';
 import '../exercises/exercise_detail_screen.dart';
 
 class RoutineCreatorScreen extends StatefulWidget {
-  const RoutineCreatorScreen({super.key});
+  final WorkoutRoutine? existingRoutine;
+
+  const RoutineCreatorScreen({super.key, this.existingRoutine});
 
   @override
   State<RoutineCreatorScreen> createState() => _RoutineCreatorScreenState();
@@ -50,6 +52,34 @@ class _RoutineCreatorScreenState extends State<RoutineCreatorScreen> {
   ];
   final List<String> _selectedMuscleFilter = [];
 
+  bool get _isEditing => widget.existingRoutine != null;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.existingRoutine != null) {
+      _nameController.text = widget.existingRoutine!.name;
+      _selectedColor = widget.existingRoutine!.color;
+      // Jump to exercise selection step since name/color are already set
+      _step = 1;
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (widget.existingRoutine != null && _selectedExercises.isEmpty) {
+      final provider = context.read<ExerciseProvider>();
+      final all = provider.allExercises;
+      for (var id in widget.existingRoutine!.exerciseIds) {
+        try {
+          final ex = all.firstWhere((e) => e.id == id);
+          _selectedExercises.add(ex);
+        } catch (_) {}
+      }
+    }
+  }
+
   @override
   void dispose() {
     _nameController.dispose();
@@ -82,14 +112,18 @@ class _RoutineCreatorScreenState extends State<RoutineCreatorScreen> {
     }
 
     final routine = WorkoutRoutine(
-      id: const Uuid().v4(),
+      id: _isEditing ? widget.existingRoutine!.id : const Uuid().v4(),
       name: _nameController.text.trim(),
       exerciseIds: _selectedExercises.map((e) => e.id).toList(),
       color: _selectedColor,
       targetMuscles: _selectedExercises.map((e) => e.bodyPart).toSet().toList(),
     );
 
-    context.read<WorkoutProvider>().createRoutine(routine);
+    if (_isEditing) {
+      context.read<WorkoutProvider>().updateRoutine(routine);
+    } else {
+      context.read<WorkoutProvider>().createRoutine(routine);
+    }
     Navigator.of(context).pop();
   }
 

@@ -135,12 +135,14 @@ class WorkoutProvider extends ChangeNotifier {
     final activities = List<ActivityType>.from(existing.activities);
     activities.remove(type);
 
-    // Clean up associated data
+    // Clean up associated data (only storage + memory, DayLog handled below)
     if (type == ActivityType.gym && existing.sessionId != null) {
-      await deleteSession(existing.sessionId!);
+      await _storage.deleteSession(existing.sessionId!);
+      _sessions.removeWhere((s) => s.id == existing.sessionId);
     }
     if (type == ActivityType.run && existing.runLogId != null) {
-      await deleteRunLog(existing.runLogId!);
+      await _storage.deleteRunLog(existing.runLogId!);
+      _runLogs.removeWhere((r) => r.id == existing.runLogId);
     }
 
     if (activities.isEmpty) {
@@ -153,18 +155,41 @@ class WorkoutProvider extends ChangeNotifier {
       if (index >= 0) _dayLogs[index] = updated;
     }
     notifyListeners();
+    _rescheduleNotifications();
   }
 
   /// Delete a run log
   Future<void> deleteRunLog(String id) async {
     await _storage.deleteRunLog(id);
     _runLogs.removeWhere((r) => r.id == id);
+    notifyListeners();
   }
 
-  /// Delete a workout session
+  /// Delete a workout session and clean up associated DayLog
   Future<void> deleteSession(String id) async {
     await _storage.deleteSession(id);
     _sessions.removeWhere((s) => s.id == id);
+
+    // Find and update any DayLog that references this session
+    final logIndex = _dayLogs.indexWhere((d) => d.sessionId == id);
+    if (logIndex >= 0) {
+      final dayLog = _dayLogs[logIndex];
+      final activities = List<ActivityType>.from(dayLog.activities);
+      activities.remove(ActivityType.gym);
+
+      if (activities.isEmpty) {
+        await _storage.deleteDayLog(dayLog.id);
+        _dayLogs.removeAt(logIndex);
+      } else {
+        final updated = dayLog.copyWith(
+          activities: activities,
+        );
+        await _storage.saveDayLog(updated);
+        _dayLogs[logIndex] = updated;
+      }
+    }
+    notifyListeners();
+    _rescheduleNotifications();
   }
 
   /// Add a gym session to a day
@@ -452,6 +477,15 @@ class WorkoutProvider extends ChangeNotifier {
   Future<void> createRoutine(WorkoutRoutine routine) async {
     await _storage.saveRoutine(routine);
     _routines.add(routine);
+    notifyListeners();
+  }
+
+  Future<void> updateRoutine(WorkoutRoutine routine) async {
+    await _storage.saveRoutine(routine);
+    final index = _routines.indexWhere((r) => r.id == routine.id);
+    if (index >= 0) {
+      _routines[index] = routine;
+    }
     notifyListeners();
   }
 

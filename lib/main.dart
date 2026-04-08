@@ -11,6 +11,7 @@ import 'services/exercise_api_service.dart';
 import 'services/notification_service.dart';
 import 'services/auth_service.dart';
 import 'services/cloud_sync_service.dart';
+import 'services/debug_log_service.dart';
 import 'providers/theme_provider.dart';
 import 'providers/workout_provider.dart';
 import 'providers/exercise_provider.dart';
@@ -22,6 +23,9 @@ import 'screens/main_shell.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Intercept all debugPrint output for in-app viewing.
+  DebugLogService.instance.install();
 
   // Initialize Firebase
   await Firebase.initializeApp();

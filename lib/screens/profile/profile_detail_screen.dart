@@ -8,6 +8,7 @@ import '../../services/data_export_service.dart';
 import '../../services/cloud_sync_service.dart';
 import 'package:intl/intl.dart';
 import 'widgets/edit_profile_dialog.dart';
+import 'debug_log_screen.dart';
 
 class ProfileDetailScreen extends StatefulWidget {
   const ProfileDetailScreen({super.key});
@@ -358,6 +359,25 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
                       );
                     }
                   }
+                },
+              ),
+            ]),
+
+            const SizedBox(height: 24),
+
+            _buildSectionHeader(theme, 'Developer'),
+            _buildInfoCard(theme, [
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.bug_report_outlined),
+                title: const Text('Debug Logs'),
+                subtitle: const Text('View in-app diagnostic messages'),
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const DebugLogScreen(),
+                    ),
+                  );
                 },
               ),
             ]),

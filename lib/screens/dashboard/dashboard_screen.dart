@@ -218,7 +218,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void _showDayDetail(DateTime day) {
     final workout = context.read<WorkoutProvider>();
     final dayLog = workout.getDayLogForDate(day);
-    if (dayLog == null) return;
+    if (dayLog == null || dayLog.activities.isEmpty) return;
 
     showModalBottomSheet(
       context: context,

@@ -52,8 +52,9 @@ class NotificationService {
       debugPrint('[Notifications] Device timezone: $timezoneName');
     } catch (e) {
       debugPrint(
-        '[Notifications] Could not detect timezone: $e — defaulting to UTC',
+        '[Notifications] Plugin timezone lookup failed: $e — trying offset fallback',
       );
+      _setTimezoneFromOffset();
     }
 
     const androidSettings = AndroidInitializationSettings(
@@ -263,6 +264,58 @@ class NotificationService {
   // ──────────────────────────────────────────────────────────────────────────
   // Private helpers
   // ──────────────────────────────────────────────────────────────────────────
+
+  /// Fallback: resolve the IANA timezone from [DateTime.now().timeZoneOffset].
+  /// No permissions required — the device already knows its own offset.
+  void _setTimezoneFromOffset() {
+    final deviceOffset = DateTime.now().timeZoneOffset;
+    final offsetMs = deviceOffset.inMilliseconds;
+    debugPrint(
+      '[Notifications] Device UTC offset: '
+      '${deviceOffset.inHours}h ${(deviceOffset.inMinutes % 60).abs()}m',
+    );
+
+    // Lookup table for half / quarter-hour offsets that are common but
+    // harder to find by scanning (scan returns the first alphabetical match).
+    const offsetToIana = {
+      19800000: 'Asia/Kolkata',       // +05:30  IST
+      20700000: 'Asia/Kathmandu',     // +05:45
+      12600000: 'Asia/Tehran',        // +03:30
+      16200000: 'Asia/Kabul',         // +04:30
+      34200000: 'Australia/Adelaide', // +09:30
+      23400000: 'Asia/Yangon',        // +06:30
+      -12600000: 'America/St_Johns',  // −03:30
+    };
+
+    final knownIana = offsetToIana[offsetMs];
+    if (knownIana != null) {
+      try {
+        tz.setLocalLocation(tz.getLocation(knownIana));
+        debugPrint('[Notifications] Timezone set via offset table: $knownIana');
+        return;
+      } catch (_) {}
+    }
+
+    // Full database scan — find any location whose current offset matches.
+    try {
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      for (final name in tz.timeZoneDatabase.locations.keys) {
+        final loc = tz.getLocation(name);
+        if (loc.timeZone(nowMs).offset.inMilliseconds == offsetMs) {
+          tz.setLocalLocation(loc);
+          debugPrint('[Notifications] Timezone set via DB scan: $name');
+          return;
+        }
+      }
+    } catch (e) {
+      debugPrint('[Notifications] DB scan failed: $e');
+    }
+
+    debugPrint(
+      '[Notifications] WARNING: Could not resolve timezone — '
+      'tz.local remains UTC. Notifications will fire at UTC times!',
+    );
+  }
 
   /// Cancel a notification by ID, swallowing any platform errors.
   Future<void> _cancelSafe(int id) async {
