@@ -4,6 +4,7 @@ import '../models/day_log.dart';
 import '../models/workout_session.dart';
 import '../models/workout_routine.dart';
 import '../models/run_log.dart';
+import '../models/activity_log.dart';
 import '../services/storage_service.dart';
 import '../services/notification_service.dart';
 import 'exercise_provider.dart';
@@ -19,6 +20,7 @@ class WorkoutProvider extends ChangeNotifier {
   List<WorkoutSession> _sessions = [];
   List<RunLog> _runLogs = [];
   List<WorkoutRoutine> _routines = [];
+  List<ActivityLog> _activityLogs = [];
 
   SleepProvider? _sleepProvider;
   AchievementProvider? _achievementProvider;
@@ -50,6 +52,7 @@ class WorkoutProvider extends ChangeNotifier {
       dayLogs: _dayLogs,
       sleepLogs: _sleepProvider?.logs ?? [],
       runLogs: _runLogs,
+      activityLogs: _activityLogs,
     );
   }
 
@@ -58,12 +61,14 @@ class WorkoutProvider extends ChangeNotifier {
   List<WorkoutSession> get sessions => _sessions;
   List<RunLog> get runLogs => _runLogs;
   List<WorkoutRoutine> get routines => _routines;
+  List<ActivityLog> get activityLogs => _activityLogs;
 
   void _loadData() {
     _dayLogs = _storage.getAllDayLogs();
     _sessions = _storage.getAllSessions();
     _runLogs = _storage.getAllRunLogs();
     _routines = _storage.getAllRoutines();
+    _activityLogs = _storage.getAllActivityLogs();
     notifyListeners();
   }
 
@@ -143,6 +148,13 @@ class WorkoutProvider extends ChangeNotifier {
     if (type == ActivityType.run && existing.runLogId != null) {
       await _storage.deleteRunLog(existing.runLogId!);
       _runLogs.removeWhere((r) => r.id == existing.runLogId);
+    }
+
+    // Clean up associated ActivityLog (swim, football, tt, badminton)
+    final activityLog = getActivityLogForDate(date, type);
+    if (activityLog != null) {
+      await _storage.deleteActivityLog(activityLog.id);
+      _activityLogs.removeWhere((a) => a.id == activityLog.id);
     }
 
     if (activities.isEmpty) {
@@ -493,5 +505,219 @@ class WorkoutProvider extends ChangeNotifier {
     await _storage.deleteRoutine(id);
     _routines.removeWhere((r) => r.id == id);
     notifyListeners();
+  }
+
+  // --- Activity Log Operations ---
+
+  /// Look up an ActivityLog by date and type (no FK needed in DayLog).
+  ActivityLog? getActivityLogForDate(DateTime date, ActivityType type) {
+    try {
+      return _activityLogs.firstWhere(
+        (a) =>
+            a.type == type &&
+            a.date.year == date.year &&
+            a.date.month == date.month &&
+            a.date.day == date.day,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Add a manual activity log (swim, football, tt, badminton).
+  Future<void> addActivityLog(ActivityLog log) async {
+    await _storage.saveActivityLog(log);
+    _activityLogs.add(log);
+
+    // Ensure the ActivityType is on the day's DayLog
+    final date = log.date;
+    final existing = getDayLogForDate(date);
+    if (existing != null) {
+      final activities = List<ActivityType>.from(existing.activities);
+      if (!activities.contains(log.type)) {
+        activities.add(log.type);
+      }
+      final updated = existing.copyWith(activities: activities);
+      await _storage.saveDayLog(updated);
+      final index = _dayLogs.indexWhere((d) => d.id == existing.id);
+      if (index >= 0) _dayLogs[index] = updated;
+    } else {
+      final dayLog = DayLog(
+        id: _uuid.v4(),
+        date: DateTime(date.year, date.month, date.day),
+        activities: [log.type],
+      );
+      await _storage.saveDayLog(dayLog);
+      _dayLogs.add(dayLog);
+    }
+    notifyListeners();
+    _rescheduleNotifications();
+  }
+
+  /// Delete an activity log by ID.
+  Future<void> deleteActivityLog(String id) async {
+    final log = _activityLogs.firstWhere((a) => a.id == id);
+    final date = log.date;
+    final type = log.type;
+
+    await _storage.deleteActivityLog(id);
+    _activityLogs.removeWhere((a) => a.id == id);
+
+    // Remove the ActivityType from DayLog if no other log of that type exists
+    final hasOtherOfSameType = _activityLogs.any(
+      (a) =>
+          a.type == type &&
+          a.date.year == date.year &&
+          a.date.month == date.month &&
+          a.date.day == date.day,
+    );
+
+    if (!hasOtherOfSameType) {
+      final existing = getDayLogForDate(date);
+      if (existing != null) {
+        final activities = List<ActivityType>.from(existing.activities);
+        activities.remove(type);
+
+        if (activities.isEmpty) {
+          await _storage.deleteDayLog(existing.id);
+          _dayLogs.removeWhere((d) => d.id == existing.id);
+        } else {
+          final updated = existing.copyWith(activities: activities);
+          await _storage.saveDayLog(updated);
+          final index = _dayLogs.indexWhere((d) => d.id == existing.id);
+          if (index >= 0) _dayLogs[index] = updated;
+        }
+      }
+    }
+    notifyListeners();
+    _rescheduleNotifications();
+  }
+
+  // --- Sports Stats ---
+
+  int get footballThisMonth {
+    final now = DateTime.now();
+    return _dayLogs
+        .where(
+          (d) =>
+              d.hasFootball &&
+              d.date.year == now.year &&
+              d.date.month == now.month,
+        )
+        .length;
+  }
+
+  int get ttThisMonth {
+    final now = DateTime.now();
+    return _dayLogs
+        .where(
+          (d) =>
+              d.hasTT &&
+              d.date.year == now.year &&
+              d.date.month == now.month,
+        )
+        .length;
+  }
+
+  int get badmintonThisMonth {
+    final now = DateTime.now();
+    return _dayLogs
+        .where(
+          (d) =>
+              d.hasBadminton &&
+              d.date.year == now.year &&
+              d.date.month == now.month,
+        )
+        .length;
+  }
+
+  int get gymThisMonth {
+    final now = DateTime.now();
+    return _dayLogs
+        .where(
+          (d) =>
+              d.hasGym &&
+              d.date.year == now.year &&
+              d.date.month == now.month,
+        )
+        .length;
+  }
+
+  int get sportsThisMonth {
+    return footballThisMonth + ttThisMonth + badmintonThisMonth;
+  }
+
+  // --- Steps & Walking Distance ---
+
+  /// Get today's step count from the DayLog.
+  int get stepsToday {
+    final now = DateTime.now();
+    final today = _dayLogs.where(
+      (d) => d.date.year == now.year && d.date.month == now.month && d.date.day == now.day,
+    );
+    if (today.isEmpty) return 0;
+    return today.first.steps ?? 0;
+  }
+
+  /// Get today's walking distance in km from the DayLog.
+  double get walkDistanceToday {
+    final now = DateTime.now();
+    final today = _dayLogs.where(
+      (d) => d.date.year == now.year && d.date.month == now.month && d.date.day == now.day,
+    );
+    if (today.isEmpty) return 0.0;
+    return today.first.walkDistanceKm ?? 0.0;
+  }
+
+  /// Update steps and distance for a specific date.
+  /// Creates a DayLog if none exists for that date.
+  Future<void> updateDailyStepsAndDistance(
+    DateTime date,
+    int steps,
+    double distanceKm,
+  ) async {
+    final dateKey =
+        '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
+    final existing = _dayLogs.where(
+      (d) =>
+          d.date.year == date.year &&
+          d.date.month == date.month &&
+          d.date.day == date.day,
+    );
+
+    if (existing.isNotEmpty) {
+      final old = existing.first;
+      final updated = old.copyWith(steps: steps, walkDistanceKm: distanceKm);
+      await _storage.saveDayLog(updated);
+      final idx = _dayLogs.indexOf(old);
+      _dayLogs[idx] = updated;
+    } else {
+      // Create a new DayLog with just steps/distance (no activities)
+      final newLog = DayLog(
+        id: dateKey,
+        date: DateTime(date.year, date.month, date.day),
+        activities: [],
+        steps: steps,
+        walkDistanceKm: distanceKm,
+      );
+      await _storage.saveDayLog(newLog);
+      _dayLogs.add(newLog);
+    }
+    notifyListeners();
+  }
+
+  /// Apply health sync records from HealthSyncService.
+  /// Each record is a Map with keys: date, steps, distanceKm.
+  Future<void> applyHealthSyncRecords(List<Map<String, dynamic>> records) async {
+    for (final record in records) {
+      final date = record['date'] as DateTime;
+      final steps = record['steps'] as int;
+      final distanceKm = record['distanceKm'] as double;
+      if (steps > 0 || distanceKm > 0) {
+        await updateDailyStepsAndDistance(date, steps, distanceKm);
+      }
+    }
+    _rescheduleNotifications();
   }
 }

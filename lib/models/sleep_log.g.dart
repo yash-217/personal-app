@@ -25,7 +25,7 @@ class SleepLogAdapter extends TypeAdapter<SleepLog> {
       quality: fields[5] == null ? 5 : (fields[5] as num).toInt(),
       mood: fields[6] as String?,
       notes: fields[7] as String?,
-      morningErection: _migrateMorningErection(fields[8]),
+      morningErection: (fields[8] as num?)?.toInt(),
       period: fields[9] as bool?,
     );
   }
@@ -65,12 +65,4 @@ class SleepLogAdapter extends TypeAdapter<SleepLog> {
       other is SleepLogAdapter &&
           runtimeType == other.runtimeType &&
           typeId == other.typeId;
-}
-
-/// Backward-compatible migration: old data stored a bool, new data stores an int (0-5).
-int? _migrateMorningErection(dynamic value) {
-  if (value == null) return null;
-  if (value is bool) return value ? 5 : 0;
-  if (value is num) return value.toInt();
-  return null;
 }

@@ -51,6 +51,8 @@ class ProfileProvider extends ChangeNotifier {
     int? weeklyGoal,
     String? weightUnit,
     DateTime? birthDate,
+    int? dailyStepGoal,
+    double? dailyWalkKmGoal,
   }) async {
     final current =
         _profile ??
@@ -71,6 +73,8 @@ class ProfileProvider extends ChangeNotifier {
       weeklyGoal: weeklyGoal,
       weightUnit: weightUnit,
       birthDate: birthDate,
+      dailyStepGoal: dailyStepGoal,
+      dailyWalkKmGoal: dailyWalkKmGoal,
     );
     await saveProfile(updated);
   }

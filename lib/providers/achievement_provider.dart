@@ -4,6 +4,7 @@ import '../models/achievement.dart';
 import '../models/day_log.dart';
 import '../models/sleep_log.dart';
 import '../models/run_log.dart';
+import '../models/activity_log.dart';
 import '../services/storage_service.dart';
 import '../services/notification_service.dart';
 
@@ -170,6 +171,59 @@ class AchievementProvider extends ChangeNotifier {
       description: '100 total gym sessions',
       category: 'volume',
     ),
+
+    // Steps & Walking
+    BadgeDefinition(
+      id: 'steps_10k_first',
+      emoji: '🚶',
+      title: 'Stepper',
+      description: 'Take 10,000 steps in a single day',
+      category: 'consistency',
+    ),
+    BadgeDefinition(
+      id: 'steps_streak_5',
+      emoji: '🏃‍♂️',
+      title: 'Stride Master',
+      description: 'Reach step goal 5 days in a row',
+      category: 'consistency',
+    ),
+    BadgeDefinition(
+      id: 'walk_total_100k',
+      emoji: '🗺️',
+      title: 'Voyager',
+      description: 'Walk 100 km total distance',
+      category: 'endurance',
+    ),
+
+    // Sports
+    BadgeDefinition(
+      id: 'sport_first_swim',
+      emoji: '🏊',
+      title: 'Water Born',
+      description: 'Log your first swim activity',
+      category: 'volume',
+    ),
+    BadgeDefinition(
+      id: 'sport_football_5',
+      emoji: '⚽',
+      title: 'Playmaker',
+      description: 'Log 5 football sessions',
+      category: 'volume',
+    ),
+    BadgeDefinition(
+      id: 'sport_tt_5',
+      emoji: '🏓',
+      title: 'Ping Pong Master',
+      description: 'Log 5 Table Tennis sessions',
+      category: 'volume',
+    ),
+    BadgeDefinition(
+      id: 'sport_badminton_5',
+      emoji: '🏸',
+      title: 'Smash Champion',
+      description: 'Log 5 Badminton sessions',
+      category: 'volume',
+    ),
   ];
 
   // ---------------------------------------------------------------------------
@@ -230,6 +284,7 @@ class AchievementProvider extends ChangeNotifier {
     required List<DayLog> dayLogs,
     required List<SleepLog> sleepLogs,
     required List<RunLog> runLogs,
+    List<ActivityLog>? activityLogs,
   }) async {
     _newlyUnlocked = [];
 
@@ -292,6 +347,37 @@ class AchievementProvider extends ChangeNotifier {
     // Full Rest: 8+ hours for 5 consecutive days
     final fullRestStreak = _calculateDurationStreak(sleepLogs, 480, 5);
     if (fullRestStreak >= 5) await _tryUnlock('sleep_8h_streak_5');
+
+    // --- Steps & Walking ---
+    // 10k steps in a single day
+    final has10kSteps = dayLogs.any((d) => (d.steps ?? 0) >= 10000);
+    if (has10kSteps) await _tryUnlock('steps_10k_first');
+
+    // Step goal streak (5 days in a row reaching the daily step goal)
+    final stepGoal = StorageService.instance.profileBox.values.isNotEmpty
+        ? (StorageService.instance.profileBox.values.first.dailyStepGoal ?? 10000)
+        : 10000;
+    final stepGoalStreak = _calculateStepGoalStreak(dayLogs, stepGoal);
+    if (stepGoalStreak >= 5) await _tryUnlock('steps_streak_5');
+
+    // Total 100km walked
+    final totalWalkKm = dayLogs.fold(
+      0.0, (sum, d) => sum + (d.walkDistanceKm ?? 0.0),
+    );
+    if (totalWalkKm >= 100.0) await _tryUnlock('walk_total_100k');
+
+    // --- Sports ---
+    final swimDays = dayLogs.where((d) => d.hasSwim).toList();
+    if (swimDays.isNotEmpty) await _tryUnlock('sport_first_swim');
+
+    final footballDays = dayLogs.where((d) => d.hasFootball).length;
+    if (footballDays >= 5) await _tryUnlock('sport_football_5');
+
+    final ttDays = dayLogs.where((d) => d.hasTT).length;
+    if (ttDays >= 5) await _tryUnlock('sport_tt_5');
+
+    final badmintonDays = dayLogs.where((d) => d.hasBadminton).length;
+    if (badmintonDays >= 5) await _tryUnlock('sport_badminton_5');
 
     if (_newlyUnlocked.isNotEmpty) {
       notifyListeners();
@@ -431,5 +517,38 @@ class AchievementProvider extends ChangeNotifier {
       }
     }
     return best;
+  }
+
+  /// Consecutive days where step count >= [goal], returns current streak.
+  int _calculateStepGoalStreak(List<DayLog> dayLogs, int goal) {
+    if (dayLogs.isEmpty) return 0;
+
+    final daysWithSteps = dayLogs
+        .where((d) => (d.steps ?? 0) > 0)
+        .toList();
+
+    final dates = daysWithSteps
+        .where((d) => (d.steps ?? 0) >= goal)
+        .map((d) => DateTime(d.date.year, d.date.month, d.date.day))
+        .toSet()
+        .toList()
+      ..sort((a, b) => b.compareTo(a)); // newest first
+
+    if (dates.isEmpty) return 0;
+
+    int streak = 0;
+    var checkDate = DateTime.now();
+    checkDate = DateTime(checkDate.year, checkDate.month, checkDate.day);
+
+    if (!dates.contains(checkDate)) {
+      checkDate = checkDate.subtract(const Duration(days: 1));
+    }
+
+    while (dates.contains(checkDate)) {
+      streak++;
+      checkDate = checkDate.subtract(const Duration(days: 1));
+    }
+
+    return streak;
   }
 }

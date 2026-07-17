@@ -13,6 +13,7 @@ import 'widgets/weekly_progress_card.dart';
 import 'widgets/activity_stats_card.dart';
 import 'widgets/dashboard_fab.dart';
 import '../workout/workout_session_screen.dart';
+import 'add_activity_log_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -134,7 +135,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             color: theme.colorScheme.primary,
                             fontWeight: FontWeight.bold,
                           ),
-                          markersMaxCount: 4,
+                          markersMaxCount: 7,
                         ),
                         calendarBuilders: CalendarBuilders(
                           markerBuilder: (context, date, _) {
@@ -166,31 +167,40 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                         case ActivityType.swim:
                                           color = AppColors.swim;
                                           break;
+                                        case ActivityType.football:
+                                          color = AppColors.football;
+                                          break;
+                                        case ActivityType.tt:
+                                          color = AppColors.tt;
+                                          break;
+                                        case ActivityType.badminton:
+                                          color = AppColors.badminton;
+                                          break;
                                       }
                                       return Container(
                                         margin: const EdgeInsets.symmetric(
-                                          horizontal: 1,
+                                          horizontal: 0.5,
                                         ),
-                                        width: 7,
-                                        height: 7,
+                                        width: 5,
+                                        height: 5,
                                         decoration: BoxDecoration(
                                           shape: BoxShape.circle,
                                           color: color,
                                         ),
                                       );
                                     }),
-                                  if (hasPeriod)
-                                    Container(
-                                      margin: const EdgeInsets.symmetric(
-                                        horizontal: 1,
+                                    if (hasPeriod)
+                                      Container(
+                                        margin: const EdgeInsets.symmetric(
+                                          horizontal: 0.5,
+                                        ),
+                                        width: 5,
+                                        height: 5,
+                                        decoration: const BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: Color(0xFFE91E63), // pink
+                                        ),
                                       ),
-                                      width: 7,
-                                      height: 7,
-                                      decoration: const BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        color: Color(0xFFE91E63), // pink
-                                      ),
-                                    ),
                                 ],
                               ),
                             );
@@ -275,6 +285,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         label = 'Swim';
                         color = AppColors.swim;
                         break;
+                      case ActivityType.football:
+                        icon = Icons.sports_soccer;
+                        label = 'Football';
+                        color = AppColors.football;
+                        break;
+                      case ActivityType.tt:
+                        icon = Icons.sports_tennis;
+                        label = 'Table Tennis';
+                        color = AppColors.tt;
+                        break;
+                      case ActivityType.badminton:
+                        icon = Icons.sports_tennis;
+                        label = 'Badminton';
+                        color = AppColors.badminton;
+                        break;
+                    }
+                    // Look up activity log for detail subtitle
+                    final activityLog = workout.getActivityLogForDate(day, type);
+                    String? subtitle;
+                    if (activityLog != null) {
+                      subtitle = '${activityLog.formattedDuration} — RPE ${activityLog.perceivedEffort} (${activityLog.effortLabel})';
+                    } else if (type == ActivityType.swim || type == ActivityType.football || type == ActivityType.tt || type == ActivityType.badminton) {
+                      subtitle = 'No details recorded';
                     }
                     return Slidable(
                       key: ValueKey('${day.toIso8601String()}-$type'),
@@ -333,6 +366,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           child: Icon(icon, color: color, size: 22),
                         ),
                         title: Text(label),
+                        subtitle: subtitle != null ? Text(subtitle, style: Theme.of(ctx).textTheme.bodySmall) : null,
                         contentPadding: const EdgeInsets.symmetric(
                           horizontal: 16,
                         ),
@@ -350,7 +384,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   );
                                 }
                               }
-                            : null,
+                            : (activityLog != null)
+                                ? () {
+                                    Navigator.of(ctx).pop();
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) => AddActivityLogScreen(
+                                          activityType: type,
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                : null,
                       ),
                     );
                   }),

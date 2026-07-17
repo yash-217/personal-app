@@ -9,8 +9,11 @@ import '../models/body_metrics.dart';
 import '../models/workout_routine.dart';
 import '../models/sleep_log.dart';
 import '../models/achievement.dart';
+import '../models/activity_log.dart';
 
 class StorageService {
+  static late StorageService instance;
+
   static const String _exercisesBox = 'exercises';
   static const String _dayLogsBox = 'dayLogs';
   static const String _sessionsBox = 'workoutSessions';
@@ -22,6 +25,7 @@ class StorageService {
   static const String _routinesBox = 'workoutRoutines';
   static const String _sleepLogsBox = 'sleepLogs';
   static const String _achievementsBox = 'achievements';
+  static const String _activityLogsBox = 'activityLogs';
 
   late Box<Exercise> exercisesBox;
   late Box<DayLog> dayLogsBox;
@@ -34,6 +38,7 @@ class StorageService {
   late Box<WorkoutRoutine> routinesBox;
   late Box<SleepLog> sleepLogsBox;
   late Box<Achievement> achievementsBox;
+  late Box<ActivityLog> activityLogsBox;
 
   Future<void> init() async {
     await Hive.initFlutter();
@@ -52,6 +57,7 @@ class StorageService {
     Hive.registerAdapter(ExerciseHistoryEntryAdapter());
     Hive.registerAdapter(SleepLogAdapter());
     Hive.registerAdapter(AchievementAdapter());
+    Hive.registerAdapter(ActivityLogAdapter());
 
     // Open boxes
     exercisesBox = await Hive.openBox<Exercise>(_exercisesBox);
@@ -65,6 +71,7 @@ class StorageService {
     routinesBox = await Hive.openBox<WorkoutRoutine>(_routinesBox);
     sleepLogsBox = await Hive.openBox<SleepLog>(_sleepLogsBox);
     achievementsBox = await Hive.openBox<Achievement>(_achievementsBox);
+    activityLogsBox = await Hive.openBox<ActivityLog>(_activityLogsBox);
   }
 
   // --- Exercises ---
@@ -213,5 +220,16 @@ class StorageService {
 
   Future<void> deleteAchievement(String id) async {
     await achievementsBox.delete(id);
+  }
+
+  // --- Activity Logs ---
+  List<ActivityLog> getAllActivityLogs() => activityLogsBox.values.toList();
+
+  Future<void> saveActivityLog(ActivityLog log) async {
+    await activityLogsBox.put(log.id, log);
+  }
+
+  Future<void> deleteActivityLog(String id) async {
+    await activityLogsBox.delete(id);
   }
 }

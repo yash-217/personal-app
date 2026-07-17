@@ -19,6 +19,12 @@ void showEditProfileDialog(BuildContext context, UserProfile? existing) {
   final goalCtrl = TextEditingController(
     text: (existing?.weeklyGoal ?? 4).toString(),
   );
+  final stepGoalCtrl = TextEditingController(
+    text: (existing?.dailyStepGoal ?? 10000).toString(),
+  );
+  final walkGoalCtrl = TextEditingController(
+    text: (existing?.dailyWalkKmGoal ?? 5.0).toString(),
+  );
   String unit = existing?.weightUnit ?? 'kg';
   String selectedGender = existing?.gender ?? '';
   DateTime? selectedBirthDate = existing?.birthDate;
@@ -59,7 +65,7 @@ void showEditProfileDialog(BuildContext context, UserProfile? existing) {
                       autofocus: true,
                       validator: (value) {
                         if (value == null || value.trim().isEmpty) {
-                          return 'Name is required';
+                           return 'Name is required';
                         }
                         return null;
                       },
@@ -224,6 +230,48 @@ void showEditProfileDialog(BuildContext context, UserProfile? existing) {
                         return null;
                       },
                     ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: stepGoalCtrl,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              labelText: 'Daily Step Goal',
+                              prefixIcon: Icon(Icons.directions_walk),
+                            ),
+                            validator: (value) {
+                              if (value == null || value.isEmpty) return 'Required';
+                              final v = int.tryParse(value);
+                              if (v == null || v <= 0) {
+                                return 'Invalid';
+                              }
+                              return null;
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextFormField(
+                            controller: walkGoalCtrl,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              labelText: 'Daily Walk Goal (km)',
+                              prefixIcon: Icon(Icons.map),
+                            ),
+                            validator: (value) {
+                              if (value == null || value.isEmpty) return 'Required';
+                              final v = double.tryParse(value);
+                              if (v == null || v <= 0) {
+                                return 'Invalid';
+                              }
+                              return null;
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
                     const SizedBox(height: 24),
                     FilledButton(
                       onPressed: () {
@@ -233,6 +281,8 @@ void showEditProfileDialog(BuildContext context, UserProfile? existing) {
                         final height = double.tryParse(heightCtrl.text) ?? 0;
                         final weight = double.tryParse(weightCtrl.text) ?? 0;
                         final goal = int.tryParse(goalCtrl.text) ?? 4;
+                        final steps = int.tryParse(stepGoalCtrl.text) ?? 10000;
+                        final walk = double.tryParse(walkGoalCtrl.text) ?? 5.0;
 
                         context.read<ProfileProvider>().updateProfile(
                           name: nameCtrl.text.trim(),
@@ -242,6 +292,8 @@ void showEditProfileDialog(BuildContext context, UserProfile? existing) {
                           birthDate: selectedBirthDate!,
                           weeklyGoal: goal,
                           weightUnit: unit,
+                          dailyStepGoal: steps,
+                          dailyWalkKmGoal: walk,
                         );
 
                         Navigator.pop(ctx);

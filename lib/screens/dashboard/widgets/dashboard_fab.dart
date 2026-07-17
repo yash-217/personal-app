@@ -6,6 +6,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../models/day_log.dart';
 import '../../workout/workout_session_screen.dart';
 import '../run_import_screen.dart';
+import '../add_activity_log_screen.dart';
 
 class DashboardFab extends StatefulWidget {
   const DashboardFab({super.key});
@@ -103,12 +104,12 @@ class _DashboardFabState extends State<DashboardFab>
         },
       ),
       _FabItem(
-        icon: Icons.pool,
-        label: 'Swim',
-        color: AppColors.swim,
+        icon: Icons.sports,
+        label: 'Sports',
+        color: AppColors.football,
         onTap: () {
           _toggleFab();
-          workout.toggleActivity(DateTime.now(), ActivityType.swim);
+          _showSportsOptions(context);
         },
       ),
     ];
@@ -280,6 +281,64 @@ class _DashboardFabState extends State<DashboardFab>
               ],
               const SizedBox(height: 16),
             ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showSportsOptions(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        final theme = Theme.of(ctx);
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Text(
+                  'Log a Sport',
+                  style: theme.textTheme.headlineSmall,
+                ),
+              ),
+              const SizedBox(height: 16),
+              _buildSportTile(ctx, Icons.pool, 'Swim', AppColors.swim, ActivityType.swim),
+              _buildSportTile(ctx, Icons.sports_soccer, 'Football', AppColors.football, ActivityType.football),
+              _buildSportTile(ctx, Icons.sports_tennis, 'Table Tennis', AppColors.tt, ActivityType.tt),
+              _buildSportTile(ctx, Icons.sports_tennis, 'Badminton', AppColors.badminton, ActivityType.badminton),
+              const SizedBox(height: 16),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildSportTile(
+    BuildContext ctx,
+    IconData icon,
+    String label,
+    Color color,
+    ActivityType type,
+  ) {
+    return ListTile(
+      leading: CircleAvatar(
+        backgroundColor: color.withValues(alpha: 0.1),
+        child: Icon(icon, color: color),
+      ),
+      title: Text(label),
+      onTap: () {
+        Navigator.of(ctx).pop();
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => AddActivityLogScreen(activityType: type),
           ),
         );
       },

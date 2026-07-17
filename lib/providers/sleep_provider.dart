@@ -41,6 +41,7 @@ class SleepProvider extends ChangeNotifier {
       dayLogs: _workoutProvider?.dayLogs ?? [],
       sleepLogs: _logs,
       runLogs: _workoutProvider?.runLogs ?? [],
+      activityLogs: _workoutProvider?.activityLogs ?? [],
     );
   }
 

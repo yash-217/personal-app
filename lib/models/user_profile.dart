@@ -28,6 +28,12 @@ class UserProfile extends HiveObject {
   @HiveField(7)
   final DateTime? birthDate;
 
+  @HiveField(8)
+  final int? dailyStepGoal; // default 10000
+
+  @HiveField(9)
+  final double? dailyWalkKmGoal; // default 5.0
+
   UserProfile({
     required this.name,
     required this.age,
@@ -37,6 +43,8 @@ class UserProfile extends HiveObject {
     this.weeklyGoal = 4,
     this.weightUnit = 'kg',
     this.birthDate,
+    this.dailyStepGoal,
+    this.dailyWalkKmGoal,
   });
 
   int get calculatedAge {
@@ -73,6 +81,8 @@ class UserProfile extends HiveObject {
     int? weeklyGoal,
     String? weightUnit,
     DateTime? birthDate,
+    int? dailyStepGoal,
+    double? dailyWalkKmGoal,
   }) {
     return UserProfile(
       name: name ?? this.name,
@@ -83,6 +93,8 @@ class UserProfile extends HiveObject {
       weeklyGoal: weeklyGoal ?? this.weeklyGoal,
       weightUnit: weightUnit ?? this.weightUnit,
       birthDate: birthDate ?? this.birthDate,
+      dailyStepGoal: dailyStepGoal ?? this.dailyStepGoal,
+      dailyWalkKmGoal: dailyWalkKmGoal ?? this.dailyWalkKmGoal,
     );
   }
 }

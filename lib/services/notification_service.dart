@@ -164,7 +164,7 @@ class NotificationService {
       await _cancelSafe(activityId);
       await _cancelSafe(windDownId);
 
-      // ── 1. Morning Sleep Reminder @ 9 AM ──
+      // ── 1. Sleep Review Reminder – 1 h after avg wake time (default 9 AM) ──
       final hasSleepLog = sleepLogs.any(
         (log) =>
             log.date.year == dateOnly.year &&
@@ -173,12 +173,18 @@ class NotificationService {
       );
 
       if (!hasSleepLog) {
+        final avgWakeMin = _averageWakeTimeMinutes(sleepLogs, now);
+        final sleepReminderMin = avgWakeMin + 60; // 1 hour after avg wake
+        final sleepReminderHour = (sleepReminderMin ~/ 60) % 24;
+        final sleepReminderMinute = sleepReminderMin % 60;
+
         final sleepTime = tz.TZDateTime(
           tz.local,
           dateOnly.year,
           dateOnly.month,
           dateOnly.day,
-          9, // 9 AM
+          sleepReminderHour,
+          sleepReminderMinute,
         );
         if (sleepTime.isAfter(now)) {
           await _scheduleNotification(
@@ -355,6 +361,37 @@ class NotificationService {
       '${avg ~/ 60}:${(avg % 60).toString().padLeft(2, '0')}',
     );
     return avg;
+  }
+
+  /// Returns the average wake-up time as minutes since midnight.
+  /// Falls back to 8*60 (8 AM) if fewer than 2 logs in the past 7 days,
+  /// so the notification fires at 9 AM by default (8 AM + 1 h).
+  int _averageWakeTimeMinutes(List<SleepLog> sleepLogs, tz.TZDateTime now) {
+    const defaultMinutes = 8 * 60; // 8 AM
+
+    final sevenDaysAgo = now.subtract(const Duration(days: 7));
+    final recentLogs = sleepLogs
+        .where((log) => log.wakeTime.isAfter(sevenDaysAgo))
+        .toList();
+
+    if (recentLogs.length < 2) return defaultMinutes;
+
+    int totalMinutes = 0;
+    for (final log in recentLogs) {
+      int mins = log.wakeTime.hour * 60 + log.wakeTime.minute;
+      // Treat very early times (before 4 AM) as next-day wake (add 24 h)
+      if (mins < 4 * 60) mins += 24 * 60;
+      totalMinutes += mins;
+    }
+
+    final avg = totalMinutes ~/ recentLogs.length;
+    // Normalise back if the average exceeded midnight
+    final normAvg = avg % (24 * 60);
+    debugPrint(
+      '[Notifications] Average wake time from ${recentLogs.length} logs: '
+      '${normAvg ~/ 60}:${(normAvg % 60).toString().padLeft(2, '0')}',
+    );
+    return normAvg;
   }
 
   Future<void> _scheduleWeeklyCheckIn(tz.TZDateTime now) async {

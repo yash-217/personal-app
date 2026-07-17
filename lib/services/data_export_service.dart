@@ -11,6 +11,7 @@ import '../models/sleep_log.dart';
 import '../models/body_metrics.dart';
 import '../models/workout_routine.dart';
 import '../models/user_profile.dart';
+import '../models/activity_log.dart';
 
 /// Service to export all Hive data as JSON and import it back.
 class DataExportService {
@@ -30,6 +31,8 @@ class DataExportService {
               'dateKey': d.dateKey,
               'date': d.date.toIso8601String(),
               'activities': d.activities.map((a) => a.index).toList(),
+              if (d.steps != null) 'steps': d.steps,
+              if (d.walkDistanceKm != null) 'walkDistanceKm': d.walkDistanceKm,
             },
           )
           .toList(),
@@ -125,6 +128,18 @@ class DataExportService {
             },
           )
           .toList(),
+      'activityLogs': _storage.activityLogsBox.values
+          .map(
+            (a) => {
+              'id': a.id,
+              'date': a.date.toIso8601String(),
+              'type': a.type.index,
+              'durationMinutes': a.durationMinutes,
+              'perceivedEffort': a.perceivedEffort,
+              'notes': a.notes,
+            },
+          )
+          .toList(),
     };
 
     return const JsonEncoder.withIndent('  ').convert(data);
@@ -175,8 +190,11 @@ class DataExportService {
           id: item['id'],
           date: DateTime.parse(item['date']),
           activities: (item['activities'] as List)
+              .where((i) => (i as int) < ActivityType.values.length)
               .map((i) => ActivityType.values[i as int])
               .toList(),
+          steps: item['steps'] as int?,
+          walkDistanceKm: (item['walkDistanceKm'] as num?)?.toDouble(),
         );
         await _storage.dayLogsBox.put(dl.id, dl);
       }
@@ -312,6 +330,25 @@ class DataExportService {
         weightUnit: profileData['weightUnit'] ?? 'kg',
       );
       await _storage.profileBox.put('current', p);
+    }
+
+    // Activity Logs
+    final activityLogsList = data['activityLogs'] as List?;
+    if (activityLogsList != null) {
+      for (final item in activityLogsList) {
+        final typeIndex = item['type'] as int;
+        if (typeIndex >= ActivityType.values.length) continue;
+        final al = ActivityLog(
+          id: item['id'],
+          date: DateTime.parse(item['date']),
+          type: ActivityType.values[typeIndex],
+          durationMinutes: item['durationMinutes'] as int,
+          perceivedEffort: item['perceivedEffort'] ?? 5,
+          notes: item['notes'],
+        );
+        await _storage.activityLogsBox.put(al.id, al);
+      }
+      counts['activityLogs'] = activityLogsList.length;
     }
 
     return counts;
