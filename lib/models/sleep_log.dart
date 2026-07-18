@@ -1,37 +1,15 @@
 import 'package:hive_ce/hive_ce.dart';
 
-part 'sleep_log.g.dart';
-
-@HiveType(typeId: 13)
 class SleepLog extends HiveObject {
-  @HiveField(0)
   final String id;
-
-  @HiveField(1)
   final DateTime date;
-
-  @HiveField(2)
   final DateTime bedtime;
-
-  @HiveField(3)
   final DateTime wakeTime;
-
-  @HiveField(4)
   final bool avoidedScreentime;
-
-  @HiveField(5)
   final int quality; // 1-10
-
-  @HiveField(6)
   final String? mood;
-
-  @HiveField(7)
   final String? notes;
-
-  @HiveField(8)
   final int? morningErection; // 0-5 rating (null if not applicable)
-
-  @HiveField(9)
   final bool? period;
 
   SleepLog({
@@ -82,4 +60,69 @@ class SleepLog extends HiveObject {
       period: period ?? this.period,
     );
   }
+}
+
+class SleepLogAdapter extends TypeAdapter<SleepLog> {
+  @override
+  final typeId = 13;
+
+  @override
+  SleepLog read(BinaryReader reader) {
+    final numOfFields = reader.readByte();
+    final fields = <int, dynamic>{
+      for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
+    };
+    return SleepLog(
+      id: fields[0] as String,
+      date: fields[1] as DateTime,
+      bedtime: fields[2] as DateTime,
+      wakeTime: fields[3] as DateTime,
+      avoidedScreentime: fields[4] == null ? false : fields[4] as bool,
+      quality: fields[5] == null ? 5 : (fields[5] as num).toInt(),
+      mood: fields[6] as String?,
+      notes: fields[7] as String?,
+      morningErection: fields[8] is num
+          ? (fields[8] as num).toInt()
+          : (fields[9] is num ? (fields[9] as num).toInt() : null),
+      period: fields[9] is bool
+          ? fields[9] as bool?
+          : (fields[8] is bool ? fields[8] as bool? : null),
+    );
+  }
+
+  @override
+  void write(BinaryWriter writer, SleepLog obj) {
+    writer
+      ..writeByte(10)
+      ..writeByte(0)
+      ..write(obj.id)
+      ..writeByte(1)
+      ..write(obj.date)
+      ..writeByte(2)
+      ..write(obj.bedtime)
+      ..writeByte(3)
+      ..write(obj.wakeTime)
+      ..writeByte(4)
+      ..write(obj.avoidedScreentime)
+      ..writeByte(5)
+      ..write(obj.quality)
+      ..writeByte(6)
+      ..write(obj.mood)
+      ..writeByte(7)
+      ..write(obj.notes)
+      ..writeByte(8)
+      ..write(obj.morningErection)
+      ..writeByte(9)
+      ..write(obj.period);
+  }
+
+  @override
+  int get hashCode => typeId.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is SleepLogAdapter &&
+          runtimeType == other.runtimeType &&
+          typeId == other.typeId;
 }
