@@ -450,11 +450,19 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
                   title: const Text('Enable Health Sync'),
                   value: healthSync.isEnabled,
                   onChanged: (val) async {
+                    setCardState(() => healthSync.isEnabled = val);
                     if (val) {
                       final granted = await healthSync.requestAuthorization();
-                      if (!granted) return;
+                      if (!granted && context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Core health permissions checked. Tap "Sync Now" to fetch data.',
+                            ),
+                          ),
+                        );
+                      }
                     }
-                    setCardState(() => healthSync.isEnabled = val);
                   },
                 ),
                 if (healthSync.isEnabled) ...[

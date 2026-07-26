@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:health/health.dart';
 import 'storage_service.dart';
@@ -52,24 +53,59 @@ class HealthSyncService {
   // Authorization
   // ---------------------------------------------------------------------------
 
+  /// Check Health Connect SDK status on Android.
+  Future<HealthConnectSdkStatus?> checkSdkStatus() async {
+    if (Platform.isAndroid) {
+      try {
+        await _health.configure();
+        final status = await _health.getHealthConnectSdkStatus();
+        debugPrint('[HealthSync] Health Connect SDK status: $status');
+        return status;
+      } catch (e) {
+        debugPrint('[HealthSync] Error checking SDK status: $e');
+        return null;
+      }
+    }
+    return null;
+  }
+
   /// Request authorization and configure the health plugin.
-  /// Returns true if the user granted access.
+  /// Returns true if access to at least core health types (steps/distance) is granted.
   Future<bool> requestAuthorization() async {
     try {
       await _health.configure();
+
+      if (Platform.isAndroid) {
+        final status = await _health.getHealthConnectSdkStatus();
+        if (status == HealthConnectSdkStatus.sdkUnavailableProviderUpdateRequired) {
+          debugPrint('[HealthSync] Health Connect update required, prompting install...');
+          await _health.installHealthConnect();
+          return false;
+        } else if (status == HealthConnectSdkStatus.sdkUnavailable) {
+          debugPrint('[HealthSync] Health Connect SDK unavailable on this device');
+          return false;
+        }
+      }
+
       final granted = await _health.requestAuthorization(
         _readTypes,
         permissions: _readTypes.map((_) => HealthDataAccess.READ).toList(),
       );
-      debugPrint('[HealthSync] Authorization granted: $granted');
-      return granted;
+      debugPrint('[HealthSync] Authorization granted (all requested types): $granted');
+
+      if (!granted) {
+        final core = await hasCorePermissions();
+        debugPrint('[HealthSync] Partial permission check — core types granted: $core');
+        return core;
+      }
+      return true;
     } catch (e) {
       debugPrint('[HealthSync] Authorization error: $e');
-      return false;
+      return await hasCorePermissions();
     }
   }
 
-  /// Check whether permissions have already been granted.
+  /// Check whether permissions for ALL requested types are granted.
   Future<bool> hasPermissions() async {
     try {
       await _health.configure();
@@ -77,9 +113,29 @@ class HealthSyncService {
         _readTypes,
         permissions: _readTypes.map((_) => HealthDataAccess.READ).toList(),
       );
-      return result ?? false;
+      if (result == true) return true;
+      return await hasCorePermissions();
     } catch (e) {
       debugPrint('[HealthSync] hasPermissions error: $e');
+      return await hasCorePermissions();
+    }
+  }
+
+  /// Check whether permissions for core types (STEPS / DISTANCE) are granted.
+  Future<bool> hasCorePermissions() async {
+    try {
+      await _health.configure();
+      final stepsPerm = await _health.hasPermissions(
+        [HealthDataType.STEPS],
+        permissions: [HealthDataAccess.READ],
+      );
+      final distPerm = await _health.hasPermissions(
+        [HealthDataType.DISTANCE_DELTA],
+        permissions: [HealthDataAccess.READ],
+      );
+      return (stepsPerm ?? false) || (distPerm ?? false);
+    } catch (e) {
+      debugPrint('[HealthSync] hasCorePermissions error: $e');
       return false;
     }
   }
@@ -226,7 +282,9 @@ class HealthSyncService {
     final hasPerm = await hasPermissions();
     if (!hasPerm) {
       final granted = await requestAuthorization();
-      if (!granted) return [];
+      if (!granted) {
+        debugPrint('[HealthSync] Permission check returned false, attempting direct fetch fallback...');
+      }
     }
 
     debugPrint('[HealthSync] Running manual sync (7 days)...');
