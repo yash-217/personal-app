@@ -13,6 +13,9 @@ class AppColors {
   static const Color gym = Color(0xFF4CAF50);
   static const Color run = Color(0xFF42A5F5);
   static const Color swim = Color(0xFF26C6DA);
+  static const Color football = Color(0xFFFF7043);
+  static const Color tt = Color(0xFFEC407A);
+  static const Color badminton = Color(0xFFAB47BC);
 
   // Status colors
   static const Color success = Color(0xFF4CAF50);

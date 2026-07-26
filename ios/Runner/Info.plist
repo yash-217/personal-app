@@ -45,5 +45,9 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSHealthShareUsageDescription</key>
+	<string>FitPrint requires read access to your health data (steps, distance, sleep, workouts) to sync and track your progress.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>FitPrint requires write access to write workouts to Apple Health if desired.</string>
 </dict>
 </plist>

@@ -79,20 +79,22 @@ class _BodyMetricsTrendsState extends State<BodyMetricsTrends> {
             onTap: () => setState(() => _selectedRange = range),
             borderRadius: BorderRadius.circular(20),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              constraints: const BoxConstraints(minWidth: 44),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
                 color: isSelected
                     ? theme.colorScheme.primaryContainer
-                    : Colors.transparent,
+                    : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text(
                 range,
-                style: theme.textTheme.labelSmall?.copyWith(
+                textAlign: TextAlign.center,
+                style: theme.textTheme.labelMedium?.copyWith(
                   color: isSelected
                       ? theme.colorScheme.onPrimaryContainer
                       : theme.colorScheme.onSurfaceVariant,
-                  fontWeight: isSelected ? FontWeight.bold : null,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
                 ),
               ),
             ),

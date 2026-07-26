@@ -4,6 +4,7 @@
 
 import 'package:hive_ce/hive_ce.dart';
 import 'package:fitprint/models/achievement.dart';
+import 'package:fitprint/models/activity_log.dart';
 import 'package:fitprint/models/body_metrics.dart';
 import 'package:fitprint/models/day_log.dart';
 import 'package:fitprint/models/exercise.dart';
@@ -17,6 +18,7 @@ import 'package:fitprint/models/workout_session.dart';
 extension HiveRegistrar on HiveInterface {
   void registerAdapters() {
     registerAdapter(AchievementAdapter());
+    registerAdapter(ActivityLogAdapter());
     registerAdapter(ActivityTypeAdapter());
     registerAdapter(BodyMetricsAdapter());
     registerAdapter(DayLogAdapter());
@@ -35,6 +37,7 @@ extension HiveRegistrar on HiveInterface {
 extension IsolatedHiveRegistrar on IsolatedHiveInterface {
   void registerAdapters() {
     registerAdapter(AchievementAdapter());
+    registerAdapter(ActivityLogAdapter());
     registerAdapter(ActivityTypeAdapter());
     registerAdapter(BodyMetricsAdapter());
     registerAdapter(DayLogAdapter());

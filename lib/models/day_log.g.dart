@@ -22,13 +22,17 @@ class DayLogAdapter extends TypeAdapter<DayLog> {
       activities: (fields[2] as List).cast<ActivityType>(),
       sessionId: fields[3] as String?,
       runLogId: fields[4] as String?,
+      steps: (fields[5] as num?)?.toInt(),
+      walkDistanceKm: (fields[6] as num?)?.toDouble(),
+      plankSeconds: (fields[7] as num?)?.toInt(),
+      pushupsCount: (fields[8] as num?)?.toInt(),
     );
   }
 
   @override
   void write(BinaryWriter writer, DayLog obj) {
     writer
-      ..writeByte(5)
+      ..writeByte(9)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -38,7 +42,15 @@ class DayLogAdapter extends TypeAdapter<DayLog> {
       ..writeByte(3)
       ..write(obj.sessionId)
       ..writeByte(4)
-      ..write(obj.runLogId);
+      ..write(obj.runLogId)
+      ..writeByte(5)
+      ..write(obj.steps)
+      ..writeByte(6)
+      ..write(obj.walkDistanceKm)
+      ..writeByte(7)
+      ..write(obj.plankSeconds)
+      ..writeByte(8)
+      ..write(obj.pushupsCount);
   }
 
   @override
@@ -65,6 +77,12 @@ class ActivityTypeAdapter extends TypeAdapter<ActivityType> {
         return ActivityType.run;
       case 2:
         return ActivityType.swim;
+      case 3:
+        return ActivityType.football;
+      case 4:
+        return ActivityType.tt;
+      case 5:
+        return ActivityType.badminton;
       default:
         return ActivityType.gym;
     }
@@ -79,6 +97,12 @@ class ActivityTypeAdapter extends TypeAdapter<ActivityType> {
         writer.writeByte(1);
       case ActivityType.swim:
         writer.writeByte(2);
+      case ActivityType.football:
+        writer.writeByte(3);
+      case ActivityType.tt:
+        writer.writeByte(4);
+      case ActivityType.badminton:
+        writer.writeByte(5);
     }
   }
 

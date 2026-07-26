@@ -4,9 +4,14 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../../providers/profile_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/workout_provider.dart';
 import '../../services/data_export_service.dart';
 import '../../services/cloud_sync_service.dart';
+import '../../services/health_sync_service.dart';
+import '../../services/storage_service.dart';
+import 'package:intl/intl.dart';
 import 'widgets/edit_profile_dialog.dart';
+import 'debug_log_screen.dart';
 
 class ProfileDetailScreen extends StatefulWidget {
   const ProfileDetailScreen({super.key});
@@ -16,6 +21,8 @@ class ProfileDetailScreen extends StatefulWidget {
 }
 
 class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
+  bool _isSyncing = false;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -250,6 +257,24 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
                     subtitle: Text(authProvider.email ?? ''),
                   ),
                   const Divider(height: 1),
+                  Builder(
+                    builder: (ctx) {
+                      final storage = ctx.read<ProfileProvider>().storage;
+                      final lastAutoBackup =
+                          CloudSyncService(storage).lastAutoBackupTime;
+                      final label = lastAutoBackup != null
+                          ? DateFormat.yMMMd().add_jm().format(lastAutoBackup)
+                          : 'Not yet';
+                      return ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.autorenew_rounded),
+                        title: const Text('Weekly Auto-Backup'),
+                        subtitle: Text('Last: $label'),
+                        dense: true,
+                      );
+                    },
+                  ),
+                  const Divider(height: 1),
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: const Icon(Icons.cloud_upload_rounded),
@@ -342,10 +367,191 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
                 },
               ),
             ]),
+
+            const SizedBox(height: 24),
+
+            _buildSectionHeader(theme, 'Health & Sync'),
+            _buildHealthSyncCard(theme),
+
+            const SizedBox(height: 24),
+
+            _buildSectionHeader(theme, 'Developer'),
+            _buildInfoCard(theme, [
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.bug_report_outlined),
+                title: const Text('Debug Logs'),
+                subtitle: const Text('View in-app diagnostic messages'),
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const DebugLogScreen(),
+                    ),
+                  );
+                },
+              ),
+            ]),
           ],
         ),
       ),
     );
+  }
+
+  Widget _buildHealthSyncCard(ThemeData theme) {
+    final healthSync = HealthSyncService(StorageService.instance);
+
+    return StatefulBuilder(
+      builder: (context, setCardState) {
+        return Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(
+                        Icons.favorite_rounded,
+                        color: Colors.green,
+                        size: 24,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Health Connect',
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Text(
+                            'Sync steps, distance & more',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Enable Health Sync'),
+                  value: healthSync.isEnabled,
+                  onChanged: (val) async {
+                    setCardState(() => healthSync.isEnabled = val);
+                    if (val) {
+                      final granted = await healthSync.requestAuthorization();
+                      if (!granted && context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Core health permissions checked. Tap "Sync Now" to fetch data.',
+                            ),
+                          ),
+                        );
+                      }
+                    }
+                  },
+                ),
+                if (healthSync.isEnabled) ...[
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Sync on App Start'),
+                    subtitle: const Text('Fast 2-day sync, throttled to every 2h'),
+                    value: healthSync.syncOnStart,
+                    onChanged: (val) {
+                      setCardState(() => healthSync.syncOnStart = val);
+                    },
+                  ),
+                  const Divider(height: 1),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: _isSyncing
+                              ? null
+                              : () async {
+                                  setState(() => _isSyncing = true);
+                                  try {
+                                    final records = await healthSync.manualSync();
+                                    if (context.mounted && records.isNotEmpty) {
+                                      final workout = context.read<WorkoutProvider>();
+                                      await workout.applyHealthSyncRecords(records);
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text(
+                                              'Synced ${records.length} days of health data',
+                                            ),
+                                          ),
+                                        );
+                                      }
+                                    } else if (context.mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(
+                                          content: Text('No new data to sync'),
+                                        ),
+                                      );
+                                    }
+                                  } catch (e) {
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(content: Text('Sync error: $e')),
+                                      );
+                                    }
+                                  }
+                                  setState(() => _isSyncing = false);
+                                },
+                          icon: _isSyncing
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : const Icon(Icons.sync),
+                          label: Text(_isSyncing ? 'Syncing...' : 'Sync Now'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (healthSync.lastSyncTime != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      'Last sync: ${_formatSyncTime(healthSync.lastSyncTime!)}',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ],
+              ],
+            ),
+          ),
+        ).animate().fadeIn(delay: 200.ms);
+      },
+    );
+  }
+
+  String _formatSyncTime(DateTime dt) {
+    final now = DateTime.now();
+    final diff = now.difference(dt);
+    if (diff.inMinutes < 1) return 'Just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    return '${diff.inDays}d ago';
   }
 
   Future<void> _performBackup(BuildContext context) async {

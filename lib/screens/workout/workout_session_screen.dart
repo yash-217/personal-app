@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:uuid/uuid.dart';
 import '../../models/exercise.dart';
 import '../../models/workout_routine.dart';
@@ -10,7 +11,6 @@ import '../../core/theme/app_colors.dart';
 import 'widgets/muscle_group_selector.dart';
 import 'widgets/exercise_selector.dart';
 import 'widgets/exercise_track_card.dart';
-import 'widgets/rest_timer_widget.dart';
 
 class WorkoutSessionScreen extends StatefulWidget {
   final List<String>? initialExercises;
@@ -32,7 +32,7 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
   final List<Exercise> _selectedExercises = [];
   WorkoutSession? _session;
   final Map<String, List<WorkoutSet>> _performanceData = {};
-  bool _showRestTimer = false;
+
 
   static const _muscleGroups = [
     'chest',
@@ -95,7 +95,7 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
       appBar: AppBar(
         title: Text(_stepTitle),
         centerTitle: true,
-        leading: widget.existingSession != null
+        leading: _isReadOnlySession
             ? const BackButton()
             : (_step > 0
                   ? IconButton(
@@ -104,16 +104,11 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
                     )
                   : null),
         actions: [
-          if (_step == 2)
+          if (_step == 2 && !_isReadOnlySession)
             IconButton(
-              icon: Icon(
-                _showRestTimer ? Icons.timer_rounded : Icons.timer_outlined,
-                color: _showRestTimer
-                    ? Theme.of(context).colorScheme.primary
-                    : null,
-              ),
-              tooltip: 'Rest Timer',
-              onPressed: () => setState(() => _showRestTimer = !_showRestTimer),
+              icon: const Icon(Icons.add_circle_outline_rounded),
+              tooltip: 'Add Exercise',
+              onPressed: _showAddExerciseSheet,
             ),
         ],
       ),
@@ -174,11 +169,23 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
     );
   }
 
+  /// Whether this screen was opened for an existing session or via a routine
+  /// (i.e. not from scratch through muscle group selection).
+  bool get _isReadOnlySession =>
+      widget.existingSession != null ||
+      (widget.initialExercises != null && widget.initialExercises!.isNotEmpty);
+
   void _createSession() {
+    // If muscle groups weren't explicitly selected (e.g. started from routine),
+    // derive them from the exercises' body parts.
+    final muscleGroups = _selectedMuscleGroups.isNotEmpty
+        ? _selectedMuscleGroups
+        : _selectedExercises.map((e) => e.bodyPart).toSet().toList();
+
     _session = WorkoutSession(
       id: const Uuid().v4(),
       date: DateTime.now(),
-      targetMuscleGroups: _selectedMuscleGroups,
+      targetMuscleGroups: muscleGroups,
       exerciseIds: _selectedExercises.map((e) => e.id).toList(),
     );
   }
@@ -188,17 +195,17 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
     return Column(
       key: const ValueKey('step2'),
       children: [
-        // Rest timer (collapsible)
-        if (_showRestTimer)
-          RestTimerWidget(
-            onDismiss: () => setState(() => _showRestTimer = false),
-          ),
         Expanded(
           child: ReorderableListView.builder(
             padding: const EdgeInsets.all(16),
-            itemCount: _selectedExercises.length,
+            itemCount: _selectedExercises.length + (_isReadOnlySession ? 0 : 1),
             buildDefaultDragHandles: false,
             onReorder: (oldIndex, newIndex) {
+              // Ignore reorder involving the "add" card
+              if (oldIndex >= _selectedExercises.length ||
+                  newIndex > _selectedExercises.length) {
+                return;
+              }
               setState(() {
                 if (newIndex > oldIndex) {
                   newIndex -= 1;
@@ -213,6 +220,10 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
               });
             },
             itemBuilder: (context, index) {
+              // "Add exercise" card at the end
+              if (index == _selectedExercises.length) {
+                return _buildAddExerciseCard(key: const ValueKey('__add__'));
+              }
               final exercise = _selectedExercises[index];
               return ExerciseTrackCard(
                 key: ValueKey(exercise.id),
@@ -245,6 +256,72 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildAddExerciseCard({Key? key}) {
+    final theme = Theme.of(context);
+    return Card(
+      key: key,
+      margin: const EdgeInsets.only(bottom: 8),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: theme.colorScheme.primary.withValues(alpha: 0.3),
+          width: 1.5,
+          strokeAlign: BorderSide.strokeAlignInside,
+        ),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: _showAddExerciseSheet,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 20),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.add_rounded,
+                color: theme.colorScheme.primary,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Add Exercise',
+                style: theme.textTheme.titleSmall?.copyWith(
+                  color: theme.colorScheme.primary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showAddExerciseSheet() {
+    final provider = context.read<ExerciseProvider>();
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => _AddExerciseSheet(
+        allExercises: provider.allExercises,
+        alreadySelected: _selectedExercises.map((e) => e.id).toSet(),
+        onAdd: (exercises) {
+          setState(() {
+            _selectedExercises.addAll(exercises);
+            if (_session != null) {
+              _session = _session!.copyWith(
+                exerciseIds: _selectedExercises.map((e) => e.id).toList(),
+              );
+            }
+          });
+        },
+      ),
     );
   }
 
@@ -425,6 +502,261 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
           },
         );
       },
+    );
+  }
+}
+
+/// Bottom sheet to search & add exercises mid-workout.
+class _AddExerciseSheet extends StatefulWidget {
+  final List<Exercise> allExercises;
+  final Set<String> alreadySelected;
+  final Function(List<Exercise>) onAdd;
+
+  const _AddExerciseSheet({
+    required this.allExercises,
+    required this.alreadySelected,
+    required this.onAdd,
+  });
+
+  @override
+  State<_AddExerciseSheet> createState() => _AddExerciseSheetState();
+}
+
+class _AddExerciseSheetState extends State<_AddExerciseSheet> {
+  final _searchCtrl = TextEditingController();
+  String _query = '';
+  final List<Exercise> _picked = [];
+
+  String _capitalize(String text) {
+    if (text.isEmpty) return text;
+    return text[0].toUpperCase() + text.substring(1);
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    final filtered = widget.allExercises.where((e) {
+      if (_query.isEmpty) return true;
+      final words = _query.toLowerCase().split(RegExp(r'\s+'))
+          .where((w) => w.isNotEmpty).toList();
+      if (words.isEmpty) return true;
+      final haystack = '${e.name} ${e.targetMuscle} ${e.bodyPart} ${e.equipment}'
+          .toLowerCase();
+      return words.every((word) => haystack.contains(word));
+    }).toList();
+
+    return DraggableScrollableSheet(
+      initialChildSize: 0.85,
+      minChildSize: 0.5,
+      maxChildSize: 0.95,
+      expand: false,
+      builder: (context, scrollController) => Column(
+        children: [
+          // Handle
+          Padding(
+            padding: const EdgeInsets.only(top: 12, bottom: 4),
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+
+          // Title
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+            child: Row(
+              children: [
+                Text(
+                  'Add Exercises',
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const Spacer(),
+                if (_picked.isNotEmpty)
+                  Badge(
+                    label: Text('${_picked.length}'),
+                    child: Icon(
+                      Icons.fitness_center_rounded,
+                      color: theme.colorScheme.primary,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+
+          // Search
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: SearchBar(
+              controller: _searchCtrl,
+              hintText: 'Search by name, muscle, or body part…',
+              leading: const Icon(Icons.search),
+              trailing: [
+                if (_query.isNotEmpty)
+                  IconButton(
+                    icon: const Icon(Icons.clear),
+                    onPressed: () {
+                      _searchCtrl.clear();
+                      setState(() => _query = '');
+                    },
+                  ),
+              ],
+              onChanged: (v) => setState(() => _query = v),
+              elevation: WidgetStateProperty.all(0),
+              backgroundColor: WidgetStateProperty.all(
+                theme.colorScheme.surfaceContainerHighest
+                    .withValues(alpha: 0.5),
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 4),
+
+          // Exercise list
+          Expanded(
+            child: filtered.isEmpty
+                ? Center(
+                    child: Text(
+                      'No exercises found',
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                  )
+                : ListView.builder(
+                    controller: scrollController,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    itemCount: filtered.length,
+                    itemBuilder: (context, index) {
+                      final exercise = filtered[index];
+                      final alreadyIn =
+                          widget.alreadySelected.contains(exercise.id);
+                      final picked = _picked.contains(exercise);
+                      final color =
+                          AppColors.getBodyPartColor(exercise.bodyPart);
+
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 4),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          side: picked
+                              ? BorderSide(
+                                  color: theme.colorScheme.primary,
+                                  width: 2,
+                                )
+                              : BorderSide.none,
+                        ),
+                        child: ListTile(
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 4,
+                          ),
+                          leading: ClipRRect(
+                            borderRadius: BorderRadius.circular(10),
+                            child: CachedNetworkImage(
+                              imageUrl: exercise.gifUrl,
+                              width: 50,
+                              height: 50,
+                              fit: BoxFit.cover,
+                              placeholder: (_, _) => Container(
+                                width: 50,
+                                height: 50,
+                                color: color.withValues(alpha: 0.1),
+                                child: Icon(
+                                  Icons.fitness_center,
+                                  color: color,
+                                  size: 20,
+                                ),
+                              ),
+                              errorWidget: (_, _, _) => Container(
+                                width: 50,
+                                height: 50,
+                                color: color.withValues(alpha: 0.1),
+                                child: Icon(
+                                  Icons.fitness_center,
+                                  color: color,
+                                  size: 20,
+                                ),
+                              ),
+                            ),
+                          ),
+                          title: Text(
+                            _capitalize(exercise.name),
+                            style: theme.textTheme.titleSmall,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          subtitle: Text(
+                            '${_capitalize(exercise.targetMuscle)} · ${_capitalize(exercise.equipment)}',
+                            style: theme.textTheme.bodySmall,
+                          ),
+                          trailing: alreadyIn
+                              ? Icon(
+                                  Icons.check_circle_rounded,
+                                  color: theme.colorScheme.outline,
+                                )
+                              : Checkbox(
+                                  value: picked,
+                                  onChanged: (val) {
+                                    setState(() {
+                                      if (val == true) {
+                                        _picked.add(exercise);
+                                      } else {
+                                        _picked.remove(exercise);
+                                      }
+                                    });
+                                  },
+                                ),
+                          onTap: alreadyIn
+                              ? null
+                              : () {
+                                  setState(() {
+                                    if (picked) {
+                                      _picked.remove(exercise);
+                                    } else {
+                                      _picked.add(exercise);
+                                    }
+                                  });
+                                },
+                        ),
+                      );
+                    },
+                  ),
+          ),
+
+          // Add button
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: FilledButton.icon(
+              onPressed: _picked.isEmpty
+                  ? null
+                  : () {
+                      widget.onAdd(_picked);
+                      Navigator.pop(context);
+                    },
+              icon: const Icon(Icons.add_rounded),
+              label: Text(
+                _picked.isEmpty
+                    ? 'Select exercises'
+                    : 'Add ${_picked.length} exercise${_picked.length > 1 ? 's' : ''}',
+              ),
+              style: FilledButton.styleFrom(
+                minimumSize: const Size.fromHeight(52),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:provider/provider.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
@@ -7,8 +8,16 @@ import '../../providers/sleep_provider.dart';
 import '../../models/sleep_log.dart';
 import 'add_sleep_log_screen.dart';
 
-class SleepScreen extends StatelessWidget {
+class SleepScreen extends StatefulWidget {
   const SleepScreen({super.key});
+
+  @override
+  State<SleepScreen> createState() => _SleepScreenState();
+}
+
+class _SleepScreenState extends State<SleepScreen> {
+  static const _pageSize = 7;
+  int _visibleCount = _pageSize;
 
   @override
   Widget build(BuildContext context) {
@@ -41,6 +50,9 @@ class SleepScreen extends StatelessWidget {
             );
           }
 
+          final displayLogs = provider.logs.take(_visibleCount).toList();
+          final hasMore = provider.logs.length > _visibleCount;
+
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
@@ -53,7 +65,21 @@ class SleepScreen extends StatelessWidget {
                 style: Theme.of(context).textTheme.titleLarge,
               ),
               const SizedBox(height: 16),
-              ...provider.logs.map((log) => _buildLogItem(context, log)),
+              ...displayLogs.map((log) => _buildLogItem(context, log)),
+              if (hasMore)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4, bottom: 16),
+                  child: TextButton(
+                    onPressed: () => setState(() => _visibleCount += _pageSize),
+                    child: Text(
+                      'See More',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
             ],
           );
         },
@@ -287,38 +313,64 @@ class SleepScreen extends StatelessWidget {
   Widget _buildLogItem(BuildContext context, SleepLog log) {
     final dateFormat = DateFormat.MMMd();
     final timeFormat = DateFormat.jm();
+    final theme = Theme.of(context);
 
-    return Dismissible(
+    return Slidable(
       key: ValueKey(log.id),
-      direction: DismissDirection.endToStart,
-      background: Container(
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 20),
-        color: Colors.red,
-        child: const Icon(Icons.delete, color: Colors.white),
-      ),
-      confirmDismiss: (direction) async {
-        return await showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Delete Log?'),
-            content: const Text('This cannot be undone.'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Cancel'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('Delete'),
-              ),
-            ],
+      startActionPane: ActionPane(
+        motion: const ScrollMotion(),
+        extentRatio: 0.25,
+        children: [
+          SlidableAction(
+            onPressed: (context) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => AddSleepLogScreen(existingLog: log),
+                ),
+              );
+            },
+            backgroundColor: theme.colorScheme.primary,
+            foregroundColor: theme.colorScheme.onPrimary,
+            icon: Icons.edit,
+            label: 'Edit',
           ),
-        );
-      },
-      onDismissed: (direction) {
-        context.read<SleepProvider>().deleteLog(log.id);
-      },
+        ],
+      ),
+      endActionPane: ActionPane(
+        motion: const ScrollMotion(),
+        extentRatio: 0.25,
+        children: [
+          SlidableAction(
+            onPressed: (context) async {
+              final confirm = await showDialog<bool>(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: const Text('Delete Log?'),
+                  content: const Text('This cannot be undone.'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      child: const Text('Cancel'),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, true),
+                      child: const Text('Delete'),
+                    ),
+                  ],
+                ),
+              );
+              if (confirm == true && context.mounted) {
+                context.read<SleepProvider>().deleteLog(log.id);
+              }
+            },
+            backgroundColor: Colors.red,
+            foregroundColor: Colors.white,
+            icon: Icons.delete,
+            label: 'Delete',
+          ),
+        ],
+      ),
       child: Card(
         margin: const EdgeInsets.only(bottom: 12),
         child: ListTile(
@@ -356,7 +408,7 @@ class SleepScreen extends StatelessWidget {
                   Icon(
                     Icons.bedtime,
                     size: 14,
-                    color: Theme.of(context).colorScheme.outline,
+                    color: theme.colorScheme.outline,
                   ),
                   const SizedBox(width: 4),
                   Text(timeFormat.format(log.bedtime)),
@@ -364,13 +416,16 @@ class SleepScreen extends StatelessWidget {
                   Icon(
                     Icons.wb_sunny,
                     size: 14,
-                    color: Theme.of(context).colorScheme.outline,
+                    color: theme.colorScheme.outline,
                   ),
                   const SizedBox(width: 4),
                   Text(timeFormat.format(log.wakeTime)),
                 ],
               ),
-              if (log.notes != null || log.mood != null || log.morningErection == true) ...[
+              if (log.notes != null ||
+                  log.mood != null ||
+                  (log.morningErection != null &&
+                      log.morningErection! > 0)) ...[
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 6,
@@ -381,18 +436,22 @@ class SleepScreen extends StatelessWidget {
                         label: Text(log.mood!),
                         visualDensity: VisualDensity.compact,
                         materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        backgroundColor: Theme.of(context)
+                        backgroundColor: theme
                             .colorScheme
                             .surfaceContainerHighest
                             .withValues(alpha: 0.5),
                       ),
-                    if (log.morningErection == true)
+                    if (log.morningErection != null && log.morningErection! > 0)
                       Chip(
-                        avatar: const Icon(Icons.check_circle, size: 14, color: Colors.green),
-                        label: const Text('ME'),
+                        avatar: const Icon(
+                          Icons.star_rounded,
+                          size: 14,
+                          color: Colors.amber,
+                        ),
+                        label: Text('ME ${log.morningErection}/5'),
                         visualDensity: VisualDensity.compact,
                         materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        backgroundColor: Colors.green.withValues(alpha: 0.1),
+                        backgroundColor: Colors.amber.withValues(alpha: 0.1),
                       ),
                   ],
                 ),
@@ -401,7 +460,7 @@ class SleepScreen extends StatelessWidget {
                     padding: const EdgeInsets.only(top: 4),
                     child: Text(
                       log.notes!,
-                      style: Theme.of(context).textTheme.bodySmall,
+                      style: theme.textTheme.bodySmall,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),

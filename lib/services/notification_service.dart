@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 import '../models/sleep_log.dart';
@@ -13,17 +14,26 @@ class NotificationService {
   final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
 
+  /// Whether the user has granted exact-alarm permission.
+  /// When false, we fall back to inexact scheduling.
+  bool _canScheduleExact = true;
+
   // ── Notification ID ranges ──
-  // Sleep reminders:      100-106  (one per day for 7 days)
-  // Activity reminders:   200-206
-  // Wind-down reminders:  300-306
-  // Weekly check-in:      400
-  // Inactivity nudge:     500
-  static const int _sleepBaseId = 100;
-  static const int _activityBaseId = 200;
-  static const int _windDownBaseId = 300;
-  static const int _weeklyCheckInId = 400;
-  static const int _inactivityId = 500;
+  // IDs are date-stable: baseId + dayOfYear (0-365).
+  // This prevents a cancelAll()-style wipe from destroying a pending
+  // notification that was scheduled on a previous app launch.
+  //
+  // Sleep reminders:      1000 + dayOfYear
+  // Activity reminders:   2000 + dayOfYear
+  // Wind-down reminders:  3000 + dayOfYear
+  // Weekly check-in:      4000
+  // Inactivity nudge:     5000
+  // Achievements:         6000+
+  static const int _sleepBaseId = 1000;
+  static const int _activityBaseId = 2000;
+  static const int _windDownBaseId = 3000;
+  static const int _weeklyCheckInId = 4000;
+  static const int _inactivityId = 5000;
 
   /// Android notification channels
   static const _channelId = 'daily_reminders';
@@ -33,6 +43,19 @@ class NotificationService {
 
   Future<void> init() async {
     tz.initializeTimeZones();
+
+    // Detect the device's local timezone so tz.local resolves correctly.
+    // Without this, tz.local defaults to UTC.
+    try {
+      final timezoneName = await FlutterTimezone.getLocalTimezone();
+      tz.setLocalLocation(tz.getLocation(timezoneName.toString()));
+      debugPrint('[Notifications] Device timezone: $timezoneName');
+    } catch (e) {
+      debugPrint(
+        '[Notifications] Plugin timezone lookup failed: $e — trying offset fallback',
+      );
+      _setTimezoneFromOffset();
+    }
 
     const androidSettings = AndroidInitializationSettings(
       '@mipmap/ic_launcher',
@@ -49,7 +72,11 @@ class NotificationService {
       iOS: iosSettings,
     );
 
-    await _plugin.initialize(settings: initSettings);
+    try {
+      await _plugin.initialize(settings: initSettings);
+    } catch (e, st) {
+      debugPrint('[Notifications] init() failed: $e\n$st');
+    }
     await _requestPermissions();
   }
 
@@ -60,8 +87,25 @@ class NotificationService {
           AndroidFlutterLocalNotificationsPlugin
         >();
     if (android != null) {
-      await android.requestNotificationsPermission();
-      await android.requestExactAlarmsPermission();
+      try {
+        await android.requestNotificationsPermission();
+      } catch (e) {
+        debugPrint('[Notifications] requestNotificationsPermission failed: $e');
+      }
+
+      try {
+        final exactGranted = await android.requestExactAlarmsPermission();
+        _canScheduleExact = exactGranted ?? false;
+        if (!_canScheduleExact) {
+          debugPrint(
+            '[Notifications] Exact alarm permission denied — '
+            'falling back to inexact scheduling',
+          );
+        }
+      } catch (e) {
+        debugPrint('[Notifications] requestExactAlarmsPermission failed: $e');
+        _canScheduleExact = false;
+      }
     }
 
     // iOS permission
@@ -70,7 +114,11 @@ class NotificationService {
           IOSFlutterLocalNotificationsPlugin
         >();
     if (ios != null) {
-      await ios.requestPermissions(alert: true, badge: true, sound: true);
+      try {
+        await ios.requestPermissions(alert: true, badge: true, sound: true);
+      } catch (e) {
+        debugPrint('[Notifications] iOS requestPermissions failed: $e');
+      }
     }
   }
 
@@ -79,14 +127,20 @@ class NotificationService {
   // ──────────────────────────────────────────────────────────────────────────
 
   /// Reschedule all notifications based on current data.
+  ///
+  /// Uses targeted cancellation instead of cancelAll() so that
+  /// already-pending notifications for other dates are preserved.
   Future<void> rescheduleNotifications({
     required List<SleepLog> sleepLogs,
     required List<DayLog> dayLogs,
   }) async {
-    // Cancel everything first so we always have a clean slate
-    await _plugin.cancelAll();
-
     final now = tz.TZDateTime.now(tz.local);
+
+    // Compute wind-down time once (same for every day in the 7-day window).
+    final avgBedtimeMin = _averageBedtimeMinutes(sleepLogs, now);
+    final windDownMin = avgBedtimeMin - 60;
+    final windDownHour = (windDownMin ~/ 60) % 24;
+    final windDownMinute = windDownMin % 60;
 
     for (int i = 0; i < 7; i++) {
       final targetDate = now.add(Duration(days: i));
@@ -95,8 +149,22 @@ class NotificationService {
         targetDate.month,
         targetDate.day,
       );
+      final dayOfYear = dateOnly
+          .difference(DateTime(dateOnly.year, 1, 1))
+          .inDays;
 
-      // ── 1. Morning Sleep Reminder @ 9 AM ──
+      final sleepId = _sleepBaseId + dayOfYear;
+      final activityId = _activityBaseId + dayOfYear;
+      final windDownId = _windDownBaseId + dayOfYear;
+
+      // Cancel only the IDs for the dates we're about to re-evaluate.
+      // Already-fired notifications are no-ops; notifications for other
+      // dates that were scheduled on previous app launches are untouched.
+      await _cancelSafe(sleepId);
+      await _cancelSafe(activityId);
+      await _cancelSafe(windDownId);
+
+      // ── 1. Sleep Review Reminder – 1 h after avg wake time (default 9 AM) ──
       final hasSleepLog = sleepLogs.any(
         (log) =>
             log.date.year == dateOnly.year &&
@@ -105,16 +173,22 @@ class NotificationService {
       );
 
       if (!hasSleepLog) {
+        final avgWakeMin = _averageWakeTimeMinutes(sleepLogs, now);
+        final sleepReminderMin = avgWakeMin + 60; // 1 hour after avg wake
+        final sleepReminderHour = (sleepReminderMin ~/ 60) % 24;
+        final sleepReminderMinute = sleepReminderMin % 60;
+
         final sleepTime = tz.TZDateTime(
           tz.local,
           dateOnly.year,
           dateOnly.month,
           dateOnly.day,
-          9, // 9 AM
+          sleepReminderHour,
+          sleepReminderMinute,
         );
         if (sleepTime.isAfter(now)) {
           await _scheduleNotification(
-            id: _sleepBaseId + i,
+            id: sleepId,
             title: '😴 Log your sleep',
             body: 'How did you sleep last night? Tap to log it.',
             scheduledDate: sleepTime,
@@ -145,7 +219,7 @@ class NotificationService {
         );
         if (activityTime.isAfter(now)) {
           await _scheduleNotification(
-            id: _activityBaseId + i,
+            id: activityId,
             title: '💪 Log your activity',
             body: "Did you work out today? Don't forget to track it!",
             scheduledDate: activityTime,
@@ -156,17 +230,24 @@ class NotificationService {
         }
       }
 
-      // ── 3. Wind-Down Reminder @ 10 PM ──
-      final windDownTime = tz.TZDateTime(
+      // ── 3. Wind-Down Reminder – 1 h before avg bedtime (default 10 PM) ──
+
+      var windDownTime = tz.TZDateTime(
         tz.local,
         dateOnly.year,
         dateOnly.month,
         dateOnly.day,
-        22, // 10 PM
+        windDownHour,
+        windDownMinute,
       );
+      // If the computed time is before noon, it likely wrapped past midnight;
+      // push it to the next calendar day.
+      if (windDownHour < 12) {
+        windDownTime = windDownTime.add(const Duration(days: 1));
+      }
       if (windDownTime.isAfter(now)) {
         await _scheduleNotification(
-          id: _windDownBaseId + i,
+          id: windDownId,
           title: '🌙 Time to wind down',
           body: 'Put your screens away for better sleep tonight.',
           scheduledDate: windDownTime,
@@ -178,17 +259,142 @@ class NotificationService {
     }
 
     // ── 4. Weekly Check-in – Next Sunday @ 10 AM ──
-    _scheduleWeeklyCheckIn(now);
+    await _cancelSafe(_weeklyCheckInId);
+    await _scheduleWeeklyCheckIn(now);
 
     // ── 5. Inactivity Nudge – 3 days from now if no recent data ──
-    _scheduleInactivityNudge(now, sleepLogs, dayLogs);
+    await _cancelSafe(_inactivityId);
+    await _scheduleInactivityNudge(now, sleepLogs, dayLogs);
   }
 
   // ──────────────────────────────────────────────────────────────────────────
   // Private helpers
   // ──────────────────────────────────────────────────────────────────────────
 
-  void _scheduleWeeklyCheckIn(tz.TZDateTime now) {
+  /// Fallback: resolve the IANA timezone from [DateTime.now().timeZoneOffset].
+  /// No permissions required — the device already knows its own offset.
+  void _setTimezoneFromOffset() {
+    final deviceOffset = DateTime.now().timeZoneOffset;
+    final offsetMs = deviceOffset.inMilliseconds;
+    debugPrint(
+      '[Notifications] Device UTC offset: '
+      '${deviceOffset.inHours}h ${(deviceOffset.inMinutes % 60).abs()}m',
+    );
+
+    // Lookup table for half / quarter-hour offsets that are common but
+    // harder to find by scanning (scan returns the first alphabetical match).
+    const offsetToIana = {
+      19800000: 'Asia/Kolkata',       // +05:30  IST
+      20700000: 'Asia/Kathmandu',     // +05:45
+      12600000: 'Asia/Tehran',        // +03:30
+      16200000: 'Asia/Kabul',         // +04:30
+      34200000: 'Australia/Adelaide', // +09:30
+      23400000: 'Asia/Yangon',        // +06:30
+      -12600000: 'America/St_Johns',  // −03:30
+    };
+
+    final knownIana = offsetToIana[offsetMs];
+    if (knownIana != null) {
+      try {
+        tz.setLocalLocation(tz.getLocation(knownIana));
+        debugPrint('[Notifications] Timezone set via offset table: $knownIana');
+        return;
+      } catch (_) {}
+    }
+
+    // Full database scan — find any location whose current offset matches.
+    try {
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      for (final name in tz.timeZoneDatabase.locations.keys) {
+        final loc = tz.getLocation(name);
+        if (loc.timeZone(nowMs).offset.inMilliseconds == offsetMs) {
+          tz.setLocalLocation(loc);
+          debugPrint('[Notifications] Timezone set via DB scan: $name');
+          return;
+        }
+      }
+    } catch (e) {
+      debugPrint('[Notifications] DB scan failed: $e');
+    }
+
+    debugPrint(
+      '[Notifications] WARNING: Could not resolve timezone — '
+      'tz.local remains UTC. Notifications will fire at UTC times!',
+    );
+  }
+
+  /// Cancel a notification by ID, swallowing any platform errors.
+  Future<void> _cancelSafe(int id) async {
+    try {
+      await _plugin.cancel(id: id);
+    } catch (e) {
+      debugPrint('[Notifications] cancel($id) failed: $e');
+    }
+  }
+
+  /// Returns the average bedtime as minutes since midnight (can be >1440 for
+  /// past-midnight bedtimes, e.g. 1:30 AM → 25*60+30 = 1530).
+  /// Falls back to 22*60 (10 PM) if fewer than 2 logs in the past 7 days.
+  int _averageBedtimeMinutes(List<SleepLog> sleepLogs, tz.TZDateTime now) {
+    const defaultMinutes = 22 * 60; // 10 PM
+
+    final sevenDaysAgo = now.subtract(const Duration(days: 7));
+    final recentLogs = sleepLogs
+        .where((log) => log.bedtime.isAfter(sevenDaysAgo))
+        .toList();
+
+    if (recentLogs.length < 2) return defaultMinutes;
+
+    // Normalise each bedtime to minutes-since-noon so that both 11 PM and
+    // 1 AM cluster together (instead of wrapping around midnight).
+    int totalMinutes = 0;
+    for (final log in recentLogs) {
+      int mins = log.bedtime.hour * 60 + log.bedtime.minute;
+      // Treat times before 6 AM as "previous evening" (add 24 h)
+      if (mins < 6 * 60) mins += 24 * 60;
+      totalMinutes += mins;
+    }
+
+    final avg = totalMinutes ~/ recentLogs.length;
+    debugPrint(
+      '[Notifications] Average bedtime from ${recentLogs.length} logs: '
+      '${avg ~/ 60}:${(avg % 60).toString().padLeft(2, '0')}',
+    );
+    return avg;
+  }
+
+  /// Returns the average wake-up time as minutes since midnight.
+  /// Falls back to 8*60 (8 AM) if fewer than 2 logs in the past 7 days,
+  /// so the notification fires at 9 AM by default (8 AM + 1 h).
+  int _averageWakeTimeMinutes(List<SleepLog> sleepLogs, tz.TZDateTime now) {
+    const defaultMinutes = 8 * 60; // 8 AM
+
+    final sevenDaysAgo = now.subtract(const Duration(days: 7));
+    final recentLogs = sleepLogs
+        .where((log) => log.wakeTime.isAfter(sevenDaysAgo))
+        .toList();
+
+    if (recentLogs.length < 2) return defaultMinutes;
+
+    int totalMinutes = 0;
+    for (final log in recentLogs) {
+      int mins = log.wakeTime.hour * 60 + log.wakeTime.minute;
+      // Treat very early times (before 4 AM) as next-day wake (add 24 h)
+      if (mins < 4 * 60) mins += 24 * 60;
+      totalMinutes += mins;
+    }
+
+    final avg = totalMinutes ~/ recentLogs.length;
+    // Normalise back if the average exceeded midnight
+    final normAvg = avg % (24 * 60);
+    debugPrint(
+      '[Notifications] Average wake time from ${recentLogs.length} logs: '
+      '${normAvg ~/ 60}:${(normAvg % 60).toString().padLeft(2, '0')}',
+    );
+    return normAvg;
+  }
+
+  Future<void> _scheduleWeeklyCheckIn(tz.TZDateTime now) async {
     // Find the next Sunday
     int daysUntilSunday = DateTime.sunday - now.weekday;
     if (daysUntilSunday <= 0) daysUntilSunday += 7;
@@ -202,29 +408,25 @@ class NotificationService {
     );
 
     if (nextSunday.isAfter(now)) {
-      _scheduleNotification(
+      await _scheduleNotification(
         id: _weeklyCheckInId,
         title: '📊 Weekly Review',
         body: 'Check your progress on your weekly goals!',
         scheduledDate: nextSunday,
       );
-      debugPrint(
-        '[Notifications] Scheduled weekly check-in for $nextSunday',
-      );
+      debugPrint('[Notifications] Scheduled weekly check-in for $nextSunday');
     }
   }
 
-  void _scheduleInactivityNudge(
+  Future<void> _scheduleInactivityNudge(
     tz.TZDateTime now,
     List<SleepLog> sleepLogs,
     List<DayLog> dayLogs,
-  ) {
+  ) async {
     // Check if user has logged anything in the last 2 days
     final twoDaysAgo = now.subtract(const Duration(days: 2));
 
-    final hasRecentSleep = sleepLogs.any(
-      (log) => log.date.isAfter(twoDaysAgo),
-    );
+    final hasRecentSleep = sleepLogs.any((log) => log.date.isAfter(twoDaysAgo));
     final hasRecentActivity = dayLogs.any(
       (log) => log.date.isAfter(twoDaysAgo),
     );
@@ -241,15 +443,14 @@ class NotificationService {
       );
 
       if (nudgeTime.isAfter(now)) {
-        _scheduleNotification(
+        await _scheduleNotification(
           id: _inactivityId,
           title: '👋 We miss you!',
-          body: "You haven't logged anything recently. Come track your progress!",
+          body:
+              "You haven't logged anything recently. Come track your progress!",
           scheduledDate: nudgeTime,
         );
-        debugPrint(
-          '[Notifications] Scheduled inactivity nudge for $nudgeTime',
-        );
+        debugPrint('[Notifications] Scheduled inactivity nudge for $nudgeTime');
       }
     }
   }
@@ -273,21 +474,30 @@ class NotificationService {
       iOS: DarwinNotificationDetails(),
     );
 
-    await _plugin.zonedSchedule(
-      id: id,
-      title: title,
-      body: body,
-      scheduledDate: scheduledDate,
-      notificationDetails: notificationDetails,
-      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-      matchDateTimeComponents: null, // one-shot, not repeating
-    );
+    // Choose schedule mode based on whether exact alarms are permitted.
+    final scheduleMode = _canScheduleExact
+        ? AndroidScheduleMode.exactAllowWhileIdle
+        : AndroidScheduleMode.inexactAllowWhileIdle;
+
+    try {
+      await _plugin.zonedSchedule(
+        id: id,
+        title: title,
+        body: body,
+        scheduledDate: scheduledDate,
+        notificationDetails: notificationDetails,
+        androidScheduleMode: scheduleMode,
+        matchDateTimeComponents: null, // one-shot, not repeating
+      );
+    } catch (e, st) {
+      debugPrint('[Notifications] zonedSchedule($id) failed: $e\n$st');
+    }
   }
 
   // ──────────────────────────────────────────────────────────────────────────
   // Achievement Notification (instant, not scheduled)
   // ──────────────────────────────────────────────────────────────────────────
-  static int _achievementIdCounter = 600;
+  static int _achievementIdCounter = 6000;
 
   Future<void> showAchievementNotification({
     required String title,
@@ -306,11 +516,15 @@ class NotificationService {
       iOS: DarwinNotificationDetails(),
     );
 
-    await _plugin.show(
-      id: _achievementIdCounter++,
-      title: title,
-      body: body,
-      notificationDetails: notificationDetails,
-    );
+    try {
+      await _plugin.show(
+        id: _achievementIdCounter++,
+        title: title,
+        body: body,
+        notificationDetails: notificationDetails,
+      );
+    } catch (e, st) {
+      debugPrint('[Notifications] show() achievement failed: $e\n$st');
+    }
   }
 }

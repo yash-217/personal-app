@@ -3,23 +3,38 @@ import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../models/workout_routine.dart';
+import '../../models/workout_session.dart';
 import '../../providers/workout_provider.dart';
 import '../../core/theme/app_colors.dart';
 import 'routine_creator_screen.dart';
 import '../workout/workout_session_screen.dart';
 import '../exercises/exercise_library_screen.dart';
 import '../../widgets/confirm_dialog.dart';
+import 'widgets/gym_fab.dart';
 
-class GymScreen extends StatelessWidget {
+class GymScreen extends StatefulWidget {
   const GymScreen({super.key});
+
+  @override
+  State<GymScreen> createState() => _GymScreenState();
+}
+
+class _GymScreenState extends State<GymScreen> {
+  static const _pageSize = 7;
+  int _visibleCount = _pageSize;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final workoutProvider = context.watch<WorkoutProvider>();
     final routines = workoutProvider.routines;
+    final allSessions = List<WorkoutSession>.from(workoutProvider.sessions)
+      ..sort((a, b) => b.date.compareTo(a.date));
+    final displaySessions = allSessions.take(_visibleCount).toList();
+    final hasMore = allSessions.length > _visibleCount;
 
     return Scaffold(
+      floatingActionButton: const GymFab(),
       body: SafeArea(
         child: CustomScrollView(
           slivers: [
@@ -50,30 +65,13 @@ class GymScreen extends StatelessWidget {
               ),
             ),
 
-            // Routines Header
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 20,
                   vertical: 8,
                 ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('My Routines', style: theme.textTheme.titleLarge),
-                    IconButton(
-                      icon: const Icon(Icons.add_circle, color: AppColors.gym),
-                      onPressed: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => const RoutineCreatorScreen(),
-                          ),
-                        );
-                      },
-                      tooltip: 'Create Routine',
-                    ),
-                  ],
-                ),
+                child: Text('My Routines', style: theme.textTheme.titleLarge),
               ),
             ),
 
@@ -116,97 +114,114 @@ class GymScreen extends StatelessWidget {
 
             // Recent Sessions List
             SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  final sessions = workoutProvider.sessions.reversed.toList();
-                  if (index >= sessions.length) return null;
-                  final session = sessions[index];
-                  return Slidable(
-                    key: Key(session.id),
-                    startActionPane: ActionPane(
-                      motion: const ScrollMotion(),
-                      extentRatio: 0.25,
-                      children: [
-                        SlidableAction(
-                          onPressed: (context) {
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => WorkoutSessionScreen(
-                                  existingSession: session,
-                                ),
+              delegate: SliverChildBuilderDelegate((context, index) {
+                final session = displaySessions[index];
+                final title = session.targetMuscleGroups.isNotEmpty
+                    ? session.targetMuscleGroups.join(", ")
+                    : '${session.exerciseIds.length} exercise${session.exerciseIds.length != 1 ? 's' : ''}';
+                return Slidable(
+                  key: Key(session.id),
+                  startActionPane: ActionPane(
+                    motion: const ScrollMotion(),
+                    extentRatio: 0.25,
+                    children: [
+                      SlidableAction(
+                        onPressed: (context) {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => WorkoutSessionScreen(
+                                existingSession: session,
                               ),
+                            ),
+                          );
+                        },
+                        backgroundColor: theme.colorScheme.primary,
+                        foregroundColor: theme.colorScheme.onPrimary,
+                        icon: Icons.edit,
+                        label: 'Edit',
+                      ),
+                    ],
+                  ),
+                  endActionPane: ActionPane(
+                    motion: const ScrollMotion(),
+                    extentRatio: 0.25,
+                    children: [
+                      SlidableAction(
+                        onPressed: (context) async {
+                          final confirm = await ConfirmDialog.show(
+                            context,
+                            title: 'Delete Session',
+                            message:
+                                'Are you sure you want to delete this session?',
+                          );
+                          if (confirm && context.mounted) {
+                            context.read<WorkoutProvider>().deleteSession(
+                              session.id,
                             );
-                          },
-                          backgroundColor: theme.colorScheme.primary,
-                          foregroundColor: theme.colorScheme.onPrimary,
-                          icon: Icons.edit,
-                          label: 'Edit',
-                        ),
-                      ],
-                    ),
-                    endActionPane: ActionPane(
-                      motion: const ScrollMotion(),
-                      extentRatio: 0.25,
-                      children: [
-                        SlidableAction(
-                          onPressed: (context) async {
-                            final confirm = await ConfirmDialog.show(
-                              context,
-                              title: 'Delete Session',
-                              message:
-                                  'Are you sure you want to delete this session?',
-                            );
-                            if (confirm && context.mounted) {
-                              context.read<WorkoutProvider>().deleteSession(
-                                session.id,
-                              );
-                            }
-                          },
-                          backgroundColor: Colors.red,
-                          foregroundColor: Colors.white,
-                          icon: Icons.delete,
-                          label: 'Delete',
-                        ),
-                      ],
-                    ),
-                    child: ListTile(
-                      leading: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: AppColors.gym.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Icon(
-                          Icons.fitness_center,
-                          color: AppColors.gym,
-                        ),
+                          }
+                        },
+                        backgroundColor: Colors.red,
+                        foregroundColor: Colors.white,
+                        icon: Icons.delete,
+                        label: 'Delete',
                       ),
-                      title: Text(
-                        session.targetMuscleGroups.join(", "),
-                        style: theme.textTheme.bodyMedium,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                    ],
+                  ),
+                  child: ListTile(
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppColors.gym.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                      subtitle: Text(
-                        '${session.date.day}/${session.date.month}/${session.date.year} • ${session.completed ? "Completed" : "Incomplete"}',
-                        style: theme.textTheme.labelSmall,
+                      child: const Icon(
+                        Icons.fitness_center,
+                        color: AppColors.gym,
                       ),
-                      onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) =>
-                                WorkoutSessionScreen(existingSession: session),
-                          ),
-                        );
-                      },
                     ),
-                  );
-                },
-                childCount: workoutProvider.sessions.length > 5
-                    ? 5
-                    : workoutProvider.sessions.length,
-              ),
+                    title: Text(
+                      title,
+                      style: theme.textTheme.bodyMedium,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle: Text(
+                      '${session.date.day}/${session.date.month}/${session.date.year} • ${session.completed ? "Completed" : "Incomplete"}',
+                      style: theme.textTheme.labelSmall,
+                    ),
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              WorkoutSessionScreen(existingSession: session),
+                        ),
+                      );
+                    },
+                  ),
+                );
+              }, childCount: displaySessions.length),
             ),
+
+            // See More button
+            if (hasMore)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 8,
+                  ),
+                  child: TextButton(
+                    onPressed: () => setState(() => _visibleCount += _pageSize),
+                    child: Text(
+                      'See More',
+                      style: TextStyle(
+                        color: theme.colorScheme.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
 
             const SliverToBoxAdapter(child: SizedBox(height: 32)),
 
@@ -335,13 +350,22 @@ class GymScreen extends StatelessWidget {
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
                       itemBuilder: (_) => [
+                        const PopupMenuItem(value: 'edit', child: Text('Edit')),
                         const PopupMenuItem(
                           value: 'delete',
                           child: Text('Delete'),
                         ),
                       ],
                       onSelected: (val) async {
-                        if (val == 'delete') {
+                        if (val == 'edit') {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => RoutineCreatorScreen(
+                                existingRoutine: routine,
+                              ),
+                            ),
+                          );
+                        } else if (val == 'delete') {
                           final confirm = await ConfirmDialog.show(
                             context,
                             title: 'Delete Routine',

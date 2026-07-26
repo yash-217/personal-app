@@ -21,8 +21,22 @@ class ActivityStatsCard extends StatelessWidget {
           children: [
             Text('Activity This Month', style: theme.textTheme.titleMedium),
             const SizedBox(height: 16),
-            Row(
+            GridView.count(
+              crossAxisCount: 2,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              childAspectRatio: 1.6,
               children: [
+                _buildActivityStat(
+                  theme,
+                  icon: Icons.fitness_center,
+                  color: AppColors.gym,
+                  label: 'Gym',
+                  value: '${workout.gymThisMonth}',
+                  subtitle: 'sessions',
+                ),
                 _buildActivityStat(
                   theme,
                   icon: Icons.directions_run,
@@ -32,14 +46,21 @@ class ActivityStatsCard extends StatelessWidget {
                   subtitle:
                       '${workout.totalRunDistanceThisMonth.toStringAsFixed(1)} km',
                 ),
-                const SizedBox(width: 16),
                 _buildActivityStat(
                   theme,
                   icon: Icons.pool,
                   color: AppColors.swim,
                   label: 'Swims',
                   value: '${workout.swimsThisMonth}',
-                  subtitle: 'this month',
+                  subtitle: 'sessions',
+                ),
+                _buildActivityStat(
+                  theme,
+                  icon: Icons.sports,
+                  color: AppColors.football,
+                  label: 'Sports',
+                  value: '${workout.sportsThisMonth}',
+                  subtitle: 'sessions',
                 ),
               ],
             ),
@@ -57,30 +78,39 @@ class ActivityStatsCard extends StatelessWidget {
     required String value,
     required String subtitle,
   }) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, color: color, size: 28),
-            const SizedBox(width: 12),
-            Column(
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 28),
+          const SizedBox(width: 12),
+          Flexible(
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(label, style: theme.textTheme.bodySmall),
                 Text(
                   value,
-                  style: theme.textTheme.titleLarge?.copyWith(color: color),
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    color: color,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-                Text(subtitle, style: theme.textTheme.labelSmall),
+                Text(
+                  subtitle,
+                  style: theme.textTheme.labelSmall,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

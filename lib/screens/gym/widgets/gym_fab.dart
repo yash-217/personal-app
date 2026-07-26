@@ -3,21 +3,17 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../providers/workout_provider.dart';
 import '../../../core/theme/app_colors.dart';
-import '../../../models/day_log.dart';
 import '../../workout/workout_session_screen.dart';
-import '../run_import_screen.dart';
-import '../add_activity_log_screen.dart';
-import 'log_plank_dialog.dart';
-import 'log_pushups_dialog.dart';
+import '../routine_creator_screen.dart';
 
-class DashboardFab extends StatefulWidget {
-  const DashboardFab({super.key});
+class GymFab extends StatefulWidget {
+  const GymFab({super.key});
 
   @override
-  State<DashboardFab> createState() => _DashboardFabState();
+  State<GymFab> createState() => _GymFabState();
 }
 
-class _DashboardFabState extends State<DashboardFab>
+class _GymFabState extends State<GymFab>
     with SingleTickerProviderStateMixin {
   late AnimationController _fabController;
   late Animation<double> _fabAnimation;
@@ -55,18 +51,16 @@ class _DashboardFabState extends State<DashboardFab>
 
   @override
   Widget build(BuildContext context) {
-    final workout = context.watch<WorkoutProvider>();
-
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
         // Mini FABs
-        ..._buildMiniFabs(context, workout),
+        ..._buildMiniFabs(context),
         const SizedBox(height: 12),
         // Main FAB
         FloatingActionButton(
-          heroTag: 'dashboardMainFab',
+          heroTag: 'gymMainFab',
           onPressed: _toggleFab,
           child: AnimatedBuilder(
             animation: _fabAnimation,
@@ -83,53 +77,31 @@ class _DashboardFabState extends State<DashboardFab>
     );
   }
 
-  List<Widget> _buildMiniFabs(BuildContext context, WorkoutProvider workout) {
+  List<Widget> _buildMiniFabs(BuildContext context) {
+    final workout = context.watch<WorkoutProvider>();
+    final routines = workout.routines;
+
     final items = [
       _FabItem(
         icon: Icons.fitness_center,
-        label: 'Gym',
+        label: 'Add Workout',
         color: AppColors.gym,
         onTap: () {
           _toggleFab();
-          _showGymOptions(context);
+          _showGymOptions(context, routines);
         },
       ),
       _FabItem(
-        icon: Icons.directions_run,
-        label: 'Run',
-        color: AppColors.run,
+        icon: Icons.edit_note,
+        label: 'Create Routine',
+        color: AppColors.seed,
         onTap: () {
           _toggleFab();
-          Navigator.of(
-            context,
-          ).push(MaterialPageRoute(builder: (_) => const RunImportScreen()));
-        },
-      ),
-      _FabItem(
-        icon: Icons.sports,
-        label: 'Sports',
-        color: AppColors.football,
-        onTap: () {
-          _toggleFab();
-          _showSportsOptions(context);
-        },
-      ),
-      _FabItem(
-        icon: Icons.self_improvement,
-        label: 'Plank',
-        color: Colors.deepPurple,
-        onTap: () {
-          _toggleFab();
-          showLogPlankDialog(context);
-        },
-      ),
-      _FabItem(
-        icon: Icons.front_hand,
-        label: 'Pushups',
-        color: Colors.orange,
-        onTap: () {
-          _toggleFab();
-          showLogPushupsDialog(context);
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => const RoutineCreatorScreen(),
+            ),
+          );
         },
       ),
     ];
@@ -173,7 +145,7 @@ class _DashboardFabState extends State<DashboardFab>
               ),
               const SizedBox(width: 12),
               FloatingActionButton.small(
-                heroTag: 'fab_${item.label}',
+                heroTag: 'gym_fab_${item.label}',
                 backgroundColor: item.color,
                 foregroundColor: Colors.white,
                 onPressed: item.onTap,
@@ -186,16 +158,13 @@ class _DashboardFabState extends State<DashboardFab>
     }).toList();
   }
 
-  void _showGymOptions(BuildContext context) {
+  void _showGymOptions(BuildContext context, List routines) {
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (ctx) {
-        final workout = ctx.watch<WorkoutProvider>();
-        final routines = workout.routines;
-
         return Padding(
           padding: const EdgeInsets.symmetric(vertical: 24),
           child: Column(
@@ -301,64 +270,6 @@ class _DashboardFabState extends State<DashboardFab>
               ],
               const SizedBox(height: 16),
             ],
-          ),
-        );
-      },
-    );
-  }
-
-  void _showSportsOptions(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) {
-        final theme = Theme.of(ctx);
-        return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Text(
-                  'Log a Sport',
-                  style: theme.textTheme.headlineSmall,
-                ),
-              ),
-              const SizedBox(height: 16),
-              _buildSportTile(ctx, Icons.pool, 'Swim', AppColors.swim, ActivityType.swim),
-              _buildSportTile(ctx, Icons.sports_soccer, 'Football', AppColors.football, ActivityType.football),
-              _buildSportTile(ctx, Icons.sports_tennis, 'Table Tennis', AppColors.tt, ActivityType.tt),
-              _buildSportTile(ctx, Icons.sports_tennis, 'Badminton', AppColors.badminton, ActivityType.badminton),
-              const SizedBox(height: 16),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildSportTile(
-    BuildContext ctx,
-    IconData icon,
-    String label,
-    Color color,
-    ActivityType type,
-  ) {
-    return ListTile(
-      leading: CircleAvatar(
-        backgroundColor: color.withValues(alpha: 0.1),
-        child: Icon(icon, color: color),
-      ),
-      title: Text(label),
-      onTap: () {
-        Navigator.of(ctx).pop();
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => AddActivityLogScreen(activityType: type),
           ),
         );
       },

@@ -9,10 +9,13 @@ import '../../providers/profile_provider.dart';
 import '../../providers/sleep_provider.dart';
 import '../../core/theme/app_colors.dart';
 import 'widgets/dashboard_stats_row.dart';
-import 'widgets/weekly_progress_card.dart';
+import 'widgets/steps_distance_card.dart';
 import 'widgets/activity_stats_card.dart';
 import 'widgets/dashboard_fab.dart';
+import 'widgets/log_plank_dialog.dart';
+import 'widgets/log_pushups_dialog.dart';
 import '../workout/workout_session_screen.dart';
+import 'add_activity_log_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -69,15 +72,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             // Stats Row (Streak Row)
             const SliverToBoxAdapter(child: DashboardStatsRow()),
 
-            // Weekly Progress — scoped rebuild for goal changes
-            SliverToBoxAdapter(
-              child: Consumer<ProfileProvider>(
-                builder: (context, profile, _) {
-                  final weeklyGoal = profile.profile?.weeklyGoal ?? 4;
-                  return WeeklyProgressCard(weeklyGoal: weeklyGoal);
-                },
-              ),
-            ),
+            // Steps & Distance Card
+            const SliverToBoxAdapter(child: StepsDistanceCard()),
 
             // Activity Stats (Activity This Month)
             const SliverToBoxAdapter(child: ActivityStatsCard()),
@@ -134,7 +130,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             color: theme.colorScheme.primary,
                             fontWeight: FontWeight.bold,
                           ),
-                          markersMaxCount: 4,
+                          markersMaxCount: 7,
                         ),
                         calendarBuilders: CalendarBuilders(
                           markerBuilder: (context, date, _) {
@@ -166,31 +162,40 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                         case ActivityType.swim:
                                           color = AppColors.swim;
                                           break;
+                                        case ActivityType.football:
+                                          color = AppColors.football;
+                                          break;
+                                        case ActivityType.tt:
+                                          color = AppColors.tt;
+                                          break;
+                                        case ActivityType.badminton:
+                                          color = AppColors.badminton;
+                                          break;
                                       }
                                       return Container(
                                         margin: const EdgeInsets.symmetric(
-                                          horizontal: 1,
+                                          horizontal: 0.5,
                                         ),
-                                        width: 7,
-                                        height: 7,
+                                        width: 5,
+                                        height: 5,
                                         decoration: BoxDecoration(
                                           shape: BoxShape.circle,
                                           color: color,
                                         ),
                                       );
                                     }),
-                                  if (hasPeriod)
-                                    Container(
-                                      margin: const EdgeInsets.symmetric(
-                                        horizontal: 1,
+                                    if (hasPeriod)
+                                      Container(
+                                        margin: const EdgeInsets.symmetric(
+                                          horizontal: 0.5,
+                                        ),
+                                        width: 5,
+                                        height: 5,
+                                        decoration: const BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: Color(0xFFE91E63), // pink
+                                        ),
                                       ),
-                                      width: 7,
-                                      height: 7,
-                                      decoration: const BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        color: Color(0xFFE91E63), // pink
-                                      ),
-                                    ),
                                 ],
                               ),
                             );
@@ -218,7 +223,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void _showDayDetail(DateTime day) {
     final workout = context.read<WorkoutProvider>();
     final dayLog = workout.getDayLogForDate(day);
-    if (dayLog == null) return;
+    final hasData = dayLog != null && (dayLog.activities.isNotEmpty || (dayLog.plankSeconds ?? 0) > 0 || (dayLog.pushupsCount ?? 0) > 0);
+    if (!hasData) return;
 
     showModalBottomSheet(
       context: context,
@@ -227,7 +233,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           builder: (ctx, setSheetState) {
             final theme = Theme.of(ctx);
             final currentLog = workout.getDayLogForDate(day);
-            if (currentLog == null || currentLog.activities.isEmpty) {
+            final hasCurrentData = currentLog != null && (currentLog.activities.isNotEmpty || (currentLog.plankSeconds ?? 0) > 0 || (currentLog.pushupsCount ?? 0) > 0);
+            if (!hasCurrentData) {
               Navigator.of(ctx).pop();
               return const SizedBox.shrink();
             }
@@ -275,6 +282,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         label = 'Swim';
                         color = AppColors.swim;
                         break;
+                      case ActivityType.football:
+                        icon = Icons.sports_soccer;
+                        label = 'Football';
+                        color = AppColors.football;
+                        break;
+                      case ActivityType.tt:
+                        icon = Icons.sports_tennis;
+                        label = 'Table Tennis';
+                        color = AppColors.tt;
+                        break;
+                      case ActivityType.badminton:
+                        icon = Icons.sports_tennis;
+                        label = 'Badminton';
+                        color = AppColors.badminton;
+                        break;
+                    }
+                    // Look up activity log for detail subtitle
+                    final activityLog = workout.getActivityLogForDate(day, type);
+                    String? subtitle;
+                    if (activityLog != null) {
+                      subtitle = '${activityLog.formattedDuration} — RPE ${activityLog.perceivedEffort} (${activityLog.effortLabel})';
+                    } else if (type == ActivityType.swim || type == ActivityType.football || type == ActivityType.tt || type == ActivityType.badminton) {
+                      subtitle = 'No details recorded';
                     }
                     return Slidable(
                       key: ValueKey('${day.toIso8601String()}-$type'),
@@ -333,6 +363,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           child: Icon(icon, color: color, size: 22),
                         ),
                         title: Text(label),
+                        subtitle: subtitle != null ? Text(subtitle, style: Theme.of(ctx).textTheme.bodySmall) : null,
                         contentPadding: const EdgeInsets.symmetric(
                           horizontal: 16,
                         ),
@@ -350,10 +381,103 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   );
                                 }
                               }
-                            : null,
+                            : (activityLog != null)
+                                ? () {
+                                    Navigator.of(ctx).pop();
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) => AddActivityLogScreen(
+                                          activityType: type,
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                : null,
                       ),
                     );
                   }),
+                  // Plank entry (if logged)
+                  if ((currentLog.plankSeconds ?? 0) > 0)
+                    Slidable(
+                      key: ValueKey('${day.toIso8601String()}-plank'),
+                      endActionPane: ActionPane(
+                        motion: const ScrollMotion(),
+                        extentRatio: 0.25,
+                        children: [
+                          SlidableAction(
+                            onPressed: (context) async {
+                              await workout.removeDailyPlank(day);
+                              setSheetState(() {});
+                            },
+                            backgroundColor: theme.colorScheme.error,
+                            foregroundColor: theme.colorScheme.onError,
+                            icon: Icons.delete_outline,
+                            label: 'Delete',
+                          ),
+                        ],
+                      ),
+                      child: ListTile(
+                        leading: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.deepPurple.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Text('🧘', style: TextStyle(fontSize: 18)),
+                        ),
+                        title: const Text('Plank'),
+                        subtitle: Text(
+                          '${currentLog.plankSeconds}s hold',
+                          style: Theme.of(ctx).textTheme.bodySmall,
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                        onTap: () {
+                          Navigator.of(ctx).pop();
+                          showLogPlankDialog(context, date: day);
+                        },
+                      ),
+                    ),
+                  // Pushups entry (if logged)
+                  if ((currentLog.pushupsCount ?? 0) > 0)
+                    Slidable(
+                      key: ValueKey('${day.toIso8601String()}-pushups'),
+                      endActionPane: ActionPane(
+                        motion: const ScrollMotion(),
+                        extentRatio: 0.25,
+                        children: [
+                          SlidableAction(
+                            onPressed: (context) async {
+                              await workout.removeDailyPushups(day);
+                              setSheetState(() {});
+                            },
+                            backgroundColor: theme.colorScheme.error,
+                            foregroundColor: theme.colorScheme.onError,
+                            icon: Icons.delete_outline,
+                            label: 'Delete',
+                          ),
+                        ],
+                      ),
+                      child: ListTile(
+                        leading: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Text('💪', style: TextStyle(fontSize: 18)),
+                        ),
+                        title: const Text('Pushups'),
+                        subtitle: Text(
+                          '${currentLog.pushupsCount} reps',
+                          style: Theme.of(ctx).textTheme.bodySmall,
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                        onTap: () {
+                          Navigator.of(ctx).pop();
+                          showLogPushupsDialog(context, date: day);
+                        },
+                      ),
+                    ),
                 ],
               ),
             );

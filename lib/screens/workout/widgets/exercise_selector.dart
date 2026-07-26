@@ -88,7 +88,12 @@ class _ExerciseSelectorState extends State<ExerciseSelector> {
 
     final filteredExercises = allForMuscles.where((e) {
       if (_searchQuery.isEmpty) return true;
-      return e.name.toLowerCase().contains(_searchQuery.toLowerCase());
+      final words = _searchQuery.toLowerCase().split(RegExp(r'\s+'))
+          .where((w) => w.isNotEmpty).toList();
+      if (words.isEmpty) return true;
+      final haystack = '${e.name} ${e.targetMuscle} ${e.bodyPart} ${e.equipment}'
+          .toLowerCase();
+      return words.every((word) => haystack.contains(word));
     }).toList();
 
     return Column(

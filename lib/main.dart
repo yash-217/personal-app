@@ -10,6 +10,9 @@ import 'services/storage_service.dart';
 import 'services/exercise_api_service.dart';
 import 'services/notification_service.dart';
 import 'services/auth_service.dart';
+import 'services/cloud_sync_service.dart';
+import 'services/debug_log_service.dart';
+import 'services/health_sync_service.dart';
 import 'providers/theme_provider.dart';
 import 'providers/workout_provider.dart';
 import 'providers/exercise_provider.dart';
@@ -21,6 +24,9 @@ import 'screens/main_shell.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Intercept all debugPrint output for in-app viewing.
+  DebugLogService.instance.install();
 
   // Initialize Firebase
   await Firebase.initializeApp();
@@ -39,59 +45,101 @@ void main() async {
     return true;
   };
 
-  final storage = StorageService();
-  await storage.init();
+  try {
+    final storage = StorageService();
+    await storage.init();
+    StorageService.instance = storage;
 
-  final exerciseApi = ExerciseApiService(storage);
+    final exerciseApi = ExerciseApiService(storage);
 
-  // Initialize notifications
-  final notificationService = NotificationService();
-  await notificationService.init();
+    // Initialize notifications
+    final notificationService = NotificationService();
+    await notificationService.init();
 
-  final sleepProvider = SleepProvider(storage);
-  final workoutProvider = WorkoutProvider(storage);
-  final achievementProvider = AchievementProvider(storage);
+    final sleepProvider = SleepProvider(storage);
+    final workoutProvider = WorkoutProvider(storage);
+    final achievementProvider = AchievementProvider(storage);
 
-  // Cross-link providers for coordinated notification rescheduling
-  sleepProvider.setWorkoutProvider(workoutProvider);
-  workoutProvider.setSleepProvider(sleepProvider);
+    // Cross-link providers for coordinated notification rescheduling
+    sleepProvider.setWorkoutProvider(workoutProvider);
+    workoutProvider.setSleepProvider(sleepProvider);
 
-  // Link achievement provider
-  sleepProvider.setAchievementProvider(achievementProvider);
-  workoutProvider.setAchievementProvider(achievementProvider);
+    // Link achievement provider
+    sleepProvider.setAchievementProvider(achievementProvider);
+    workoutProvider.setAchievementProvider(achievementProvider);
 
-  // Schedule notifications based on current data
-  notificationService.rescheduleNotifications(
-    sleepLogs: sleepProvider.logs,
-    dayLogs: workoutProvider.dayLogs,
-  );
+    // Schedule notifications based on current data
+    notificationService.rescheduleNotifications(
+      sleepLogs: sleepProvider.logs,
+      dayLogs: workoutProvider.dayLogs,
+    );
 
-  // Run initial achievement evaluation
-  achievementProvider.evaluate(
-    dayLogs: workoutProvider.dayLogs,
-    sleepLogs: sleepProvider.logs,
-    runLogs: workoutProvider.runLogs,
-  );
+    // Run initial achievement evaluation
+    achievementProvider.evaluate(
+      dayLogs: workoutProvider.dayLogs,
+      sleepLogs: sleepProvider.logs,
+      runLogs: workoutProvider.runLogs,
+      activityLogs: workoutProvider.activityLogs,
+    );
 
-  // Auth service
-  final authService = AuthService();
+    // Auth service
+    final authService = AuthService();
 
-  runApp(
-    MultiProvider(
-      providers: [
-        ChangeNotifierProvider(create: (_) => ThemeProvider(storage)),
-        ChangeNotifierProvider.value(value: workoutProvider),
-        ChangeNotifierProvider(
-          create: (_) => ExerciseProvider(exerciseApi, storage),
+    // Trigger weekly auto-backup (fire-and-forget, non-blocking)
+    CloudSyncService(storage).autoBackupIfNeeded();
+
+    // Health sync on startup (non-blocking, runs after first frame)
+    final healthSync = HealthSyncService(storage);
+    if (healthSync.syncOnStart && healthSync.isEnabled) {
+      Future.microtask(() async {
+        try {
+          final records = await healthSync.startupSync();
+          if (records.isNotEmpty) {
+            await workoutProvider.applyHealthSyncRecords(records);
+            debugPrint('[Main] Startup health sync applied ${records.length} records');
+          }
+        } catch (e) {
+          debugPrint('[Main] Startup health sync error: $e');
+        }
+      });
+    }
+
+    runApp(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider(create: (_) => ThemeProvider(storage)),
+          ChangeNotifierProvider.value(value: workoutProvider),
+          ChangeNotifierProvider(
+            create: (_) => ExerciseProvider(exerciseApi, storage),
+          ),
+          ChangeNotifierProvider(create: (_) => ProfileProvider(storage)),
+          ChangeNotifierProvider.value(value: sleepProvider),
+          ChangeNotifierProvider.value(value: achievementProvider),
+          ChangeNotifierProvider(create: (_) => AuthProvider(authService)),
+        ],
+        child: const FitPrintApp(),
+      ),
+    );
+  } catch (e, st) {
+    debugPrint('FATAL STARTUP ERROR: $e\n$st');
+    // Ensure the app still runs at least a fallback screen so it doesn't stay black
+    runApp(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Text(
+                'Fatal Startup Error:\n$e\n\nCheck console logs for details.',
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.red),
+              ),
+            ),
+          ),
         ),
-        ChangeNotifierProvider(create: (_) => ProfileProvider(storage)),
-        ChangeNotifierProvider.value(value: sleepProvider),
-        ChangeNotifierProvider.value(value: achievementProvider),
-        ChangeNotifierProvider(create: (_) => AuthProvider(authService)),
-      ],
-      child: const FitPrintApp(),
-    ),
-  );
+      ),
+    );
+  }
 }
 
 class FitPrintApp extends StatelessWidget {

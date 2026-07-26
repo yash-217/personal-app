@@ -7,12 +7,18 @@ import 'widgets/profile_setup.dart';
 import 'widgets/body_metrics_section.dart';
 import 'widgets/edit_profile_dialog.dart';
 import 'widgets/add_metrics_dialog.dart';
+import 'widgets/plank_pushup_trends.dart';
 import 'profile_detail_screen.dart';
 import 'achievements_screen.dart';
 
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -141,7 +147,6 @@ class ProfileScreen extends StatelessWidget {
                                 ],
                               ),
                             ),
-                            // Mini progress indicator
                             SizedBox(
                               width: 32,
                               height: 32,
@@ -171,6 +176,9 @@ class ProfileScreen extends StatelessWidget {
                 },
               ),
 
+              // Plank & Pushup Trends
+              const PlankPushupTrends(),
+
               // Body Metrics section
               BodyMetricsSection(
                 onEdit: (metrics) =>
@@ -187,3 +195,4 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 }
+
