@@ -24,13 +24,15 @@ class DayLogAdapter extends TypeAdapter<DayLog> {
       runLogId: fields[4] as String?,
       steps: (fields[5] as num?)?.toInt(),
       walkDistanceKm: (fields[6] as num?)?.toDouble(),
+      plankSeconds: (fields[7] as num?)?.toInt(),
+      pushupsCount: (fields[8] as num?)?.toInt(),
     );
   }
 
   @override
   void write(BinaryWriter writer, DayLog obj) {
     writer
-      ..writeByte(7)
+      ..writeByte(9)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -44,7 +46,11 @@ class DayLogAdapter extends TypeAdapter<DayLog> {
       ..writeByte(5)
       ..write(obj.steps)
       ..writeByte(6)
-      ..write(obj.walkDistanceKm);
+      ..write(obj.walkDistanceKm)
+      ..writeByte(7)
+      ..write(obj.plankSeconds)
+      ..writeByte(8)
+      ..write(obj.pushupsCount);
   }
 
   @override

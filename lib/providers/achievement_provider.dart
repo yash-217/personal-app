@@ -224,6 +224,73 @@ class AchievementProvider extends ChangeNotifier {
       description: 'Log 5 Badminton sessions',
       category: 'volume',
     ),
+
+    // Plank
+    BadgeDefinition(
+      id: 'plank_first',
+      emoji: '🧘',
+      title: 'First Plank',
+      description: 'Log your first plank hold',
+      category: 'consistency',
+    ),
+    BadgeDefinition(
+      id: 'plank_60s',
+      emoji: '⏱️',
+      title: 'One Minute Plank',
+      description: 'Hold a plank for 60+ seconds',
+      category: 'endurance',
+    ),
+    BadgeDefinition(
+      id: 'plank_streak_7',
+      emoji: '🔥',
+      title: 'Plank Week',
+      description: 'Log planks 7 days in a row',
+      category: 'consistency',
+    ),
+    BadgeDefinition(
+      id: 'plank_120s',
+      emoji: '💎',
+      title: 'Plank Master',
+      description: 'Hold a plank for 120+ seconds',
+      category: 'endurance',
+    ),
+
+    // Pushups
+    BadgeDefinition(
+      id: 'pushups_first',
+      emoji: '💪',
+      title: 'First Set',
+      description: 'Log your first pushup set',
+      category: 'consistency',
+    ),
+    BadgeDefinition(
+      id: 'pushups_25',
+      emoji: '🎯',
+      title: '25 Club',
+      description: 'Do 25+ pushups in a single set',
+      category: 'endurance',
+    ),
+    BadgeDefinition(
+      id: 'pushups_50',
+      emoji: '🏆',
+      title: 'Half Century',
+      description: 'Do 50+ pushups in a single set',
+      category: 'endurance',
+    ),
+    BadgeDefinition(
+      id: 'pushups_streak_7',
+      emoji: '🔥',
+      title: 'Pushup Week',
+      description: 'Log pushups 7 days in a row',
+      category: 'consistency',
+    ),
+    BadgeDefinition(
+      id: 'pushups_total_1000',
+      emoji: '🗺️',
+      title: 'Thousand Reps',
+      description: '1,000 total pushups logged',
+      category: 'volume',
+    ),
   ];
 
   // ---------------------------------------------------------------------------
@@ -379,6 +446,24 @@ class AchievementProvider extends ChangeNotifier {
     final badmintonDays = dayLogs.where((d) => d.hasBadminton).length;
     if (badmintonDays >= 5) await _tryUnlock('sport_badminton_5');
 
+    // --- Plank ---
+    final plankDays = dayLogs.where((d) => (d.plankSeconds ?? 0) > 0).toList();
+    if (plankDays.isNotEmpty) await _tryUnlock('plank_first');
+    if (plankDays.any((d) => d.plankSeconds! >= 60)) await _tryUnlock('plank_60s');
+    if (plankDays.any((d) => d.plankSeconds! >= 120)) await _tryUnlock('plank_120s');
+    final plankStreak = _calculateDayLogStreak(dayLogs, (d) => (d.plankSeconds ?? 0) > 0);
+    if (plankStreak >= 7) await _tryUnlock('plank_streak_7');
+
+    // --- Pushups ---
+    final pushupDays = dayLogs.where((d) => (d.pushupsCount ?? 0) > 0).toList();
+    if (pushupDays.isNotEmpty) await _tryUnlock('pushups_first');
+    if (pushupDays.any((d) => d.pushupsCount! >= 25)) await _tryUnlock('pushups_25');
+    if (pushupDays.any((d) => d.pushupsCount! >= 50)) await _tryUnlock('pushups_50');
+    final pushupStreak = _calculateDayLogStreak(dayLogs, (d) => (d.pushupsCount ?? 0) > 0);
+    if (pushupStreak >= 7) await _tryUnlock('pushups_streak_7');
+    final totalPushups = dayLogs.fold(0, (sum, d) => sum + (d.pushupsCount ?? 0));
+    if (totalPushups >= 1000) await _tryUnlock('pushups_total_1000');
+
     if (_newlyUnlocked.isNotEmpty) {
       notifyListeners();
     }
@@ -529,6 +614,34 @@ class AchievementProvider extends ChangeNotifier {
 
     final dates = daysWithSteps
         .where((d) => (d.steps ?? 0) >= goal)
+        .map((d) => DateTime(d.date.year, d.date.month, d.date.day))
+        .toSet()
+        .toList()
+      ..sort((a, b) => b.compareTo(a)); // newest first
+
+    if (dates.isEmpty) return 0;
+
+    int streak = 0;
+    var checkDate = DateTime.now();
+    checkDate = DateTime(checkDate.year, checkDate.month, checkDate.day);
+
+    if (!dates.contains(checkDate)) {
+      checkDate = checkDate.subtract(const Duration(days: 1));
+    }
+
+    while (dates.contains(checkDate)) {
+      streak++;
+      checkDate = checkDate.subtract(const Duration(days: 1));
+    }
+
+    return streak;
+  }
+
+  /// Generic DayLog streak calculator. Counts consecutive days (from today
+  /// backwards) where [test] returns true.
+  int _calculateDayLogStreak(List<DayLog> dayLogs, bool Function(DayLog) test) {
+    final dates = dayLogs
+        .where(test)
         .map((d) => DateTime(d.date.year, d.date.month, d.date.day))
         .toSet()
         .toList()

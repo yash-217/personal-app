@@ -7,6 +7,8 @@ import '../../../models/day_log.dart';
 import '../../workout/workout_session_screen.dart';
 import '../run_import_screen.dart';
 import '../add_activity_log_screen.dart';
+import 'log_plank_dialog.dart';
+import 'log_pushups_dialog.dart';
 
 class DashboardFab extends StatefulWidget {
   const DashboardFab({super.key});
@@ -110,6 +112,24 @@ class _DashboardFabState extends State<DashboardFab>
         onTap: () {
           _toggleFab();
           _showSportsOptions(context);
+        },
+      ),
+      _FabItem(
+        icon: Icons.self_improvement,
+        label: 'Plank',
+        color: Colors.deepPurple,
+        onTap: () {
+          _toggleFab();
+          showLogPlankDialog(context);
+        },
+      ),
+      _FabItem(
+        icon: Icons.front_hand,
+        label: 'Pushups',
+        color: Colors.orange,
+        onTap: () {
+          _toggleFab();
+          showLogPushupsDialog(context);
         },
       ),
     ];

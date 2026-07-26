@@ -9,9 +9,11 @@ import '../../providers/profile_provider.dart';
 import '../../providers/sleep_provider.dart';
 import '../../core/theme/app_colors.dart';
 import 'widgets/dashboard_stats_row.dart';
-import 'widgets/weekly_progress_card.dart';
+import 'widgets/steps_distance_card.dart';
 import 'widgets/activity_stats_card.dart';
 import 'widgets/dashboard_fab.dart';
+import 'widgets/log_plank_dialog.dart';
+import 'widgets/log_pushups_dialog.dart';
 import '../workout/workout_session_screen.dart';
 import 'add_activity_log_screen.dart';
 
@@ -70,15 +72,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             // Stats Row (Streak Row)
             const SliverToBoxAdapter(child: DashboardStatsRow()),
 
-            // Weekly Progress — scoped rebuild for goal changes
-            SliverToBoxAdapter(
-              child: Consumer<ProfileProvider>(
-                builder: (context, profile, _) {
-                  final weeklyGoal = profile.profile?.weeklyGoal ?? 4;
-                  return WeeklyProgressCard(weeklyGoal: weeklyGoal);
-                },
-              ),
-            ),
+            // Steps & Distance Card
+            const SliverToBoxAdapter(child: StepsDistanceCard()),
 
             // Activity Stats (Activity This Month)
             const SliverToBoxAdapter(child: ActivityStatsCard()),
@@ -228,7 +223,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void _showDayDetail(DateTime day) {
     final workout = context.read<WorkoutProvider>();
     final dayLog = workout.getDayLogForDate(day);
-    if (dayLog == null || dayLog.activities.isEmpty) return;
+    final hasData = dayLog != null && (dayLog.activities.isNotEmpty || (dayLog.plankSeconds ?? 0) > 0 || (dayLog.pushupsCount ?? 0) > 0);
+    if (!hasData) return;
 
     showModalBottomSheet(
       context: context,
@@ -237,7 +233,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           builder: (ctx, setSheetState) {
             final theme = Theme.of(ctx);
             final currentLog = workout.getDayLogForDate(day);
-            if (currentLog == null || currentLog.activities.isEmpty) {
+            final hasCurrentData = currentLog != null && (currentLog.activities.isNotEmpty || (currentLog.plankSeconds ?? 0) > 0 || (currentLog.pushupsCount ?? 0) > 0);
+            if (!hasCurrentData) {
               Navigator.of(ctx).pop();
               return const SizedBox.shrink();
             }
@@ -399,6 +396,88 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                     );
                   }),
+                  // Plank entry (if logged)
+                  if ((currentLog.plankSeconds ?? 0) > 0)
+                    Slidable(
+                      key: ValueKey('${day.toIso8601String()}-plank'),
+                      endActionPane: ActionPane(
+                        motion: const ScrollMotion(),
+                        extentRatio: 0.25,
+                        children: [
+                          SlidableAction(
+                            onPressed: (context) async {
+                              await workout.removeDailyPlank(day);
+                              setSheetState(() {});
+                            },
+                            backgroundColor: theme.colorScheme.error,
+                            foregroundColor: theme.colorScheme.onError,
+                            icon: Icons.delete_outline,
+                            label: 'Delete',
+                          ),
+                        ],
+                      ),
+                      child: ListTile(
+                        leading: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.deepPurple.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Text('🧘', style: TextStyle(fontSize: 18)),
+                        ),
+                        title: const Text('Plank'),
+                        subtitle: Text(
+                          '${currentLog.plankSeconds}s hold',
+                          style: Theme.of(ctx).textTheme.bodySmall,
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                        onTap: () {
+                          Navigator.of(ctx).pop();
+                          showLogPlankDialog(context, date: day);
+                        },
+                      ),
+                    ),
+                  // Pushups entry (if logged)
+                  if ((currentLog.pushupsCount ?? 0) > 0)
+                    Slidable(
+                      key: ValueKey('${day.toIso8601String()}-pushups'),
+                      endActionPane: ActionPane(
+                        motion: const ScrollMotion(),
+                        extentRatio: 0.25,
+                        children: [
+                          SlidableAction(
+                            onPressed: (context) async {
+                              await workout.removeDailyPushups(day);
+                              setSheetState(() {});
+                            },
+                            backgroundColor: theme.colorScheme.error,
+                            foregroundColor: theme.colorScheme.onError,
+                            icon: Icons.delete_outline,
+                            label: 'Delete',
+                          ),
+                        ],
+                      ),
+                      child: ListTile(
+                        leading: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Text('💪', style: TextStyle(fontSize: 18)),
+                        ),
+                        title: const Text('Pushups'),
+                        subtitle: Text(
+                          '${currentLog.pushupsCount} reps',
+                          style: Theme.of(ctx).textTheme.bodySmall,
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                        onTap: () {
+                          Navigator.of(ctx).pop();
+                          showLogPushupsDialog(context, date: day);
+                        },
+                      ),
+                    ),
                 ],
               ),
             );

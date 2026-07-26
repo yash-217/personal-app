@@ -41,6 +41,12 @@ class DayLog extends HiveObject {
   @HiveField(6)
   final double? walkDistanceKm;
 
+  @HiveField(7)
+  final int? plankSeconds;
+
+  @HiveField(8)
+  final int? pushupsCount;
+
   DayLog({
     required this.id,
     required this.date,
@@ -49,6 +55,8 @@ class DayLog extends HiveObject {
     this.runLogId,
     this.steps,
     this.walkDistanceKm,
+    this.plankSeconds,
+    this.pushupsCount,
   });
 
   DayLog copyWith({
@@ -59,6 +67,8 @@ class DayLog extends HiveObject {
     String? runLogId,
     int? steps,
     double? walkDistanceKm,
+    int? plankSeconds,
+    int? pushupsCount,
   }) {
     return DayLog(
       id: id ?? this.id,
@@ -68,6 +78,8 @@ class DayLog extends HiveObject {
       runLogId: runLogId ?? this.runLogId,
       steps: steps ?? this.steps,
       walkDistanceKm: walkDistanceKm ?? this.walkDistanceKm,
+      plankSeconds: plankSeconds ?? this.plankSeconds,
+      pushupsCount: pushupsCount ?? this.pushupsCount,
     );
   }
 

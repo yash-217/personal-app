@@ -720,4 +720,150 @@ class WorkoutProvider extends ChangeNotifier {
     }
     _rescheduleNotifications();
   }
+
+  // --- Plank & Pushups ---
+
+  /// Get today's plank hold duration in seconds.
+  int get plankSecondsToday {
+    final now = DateTime.now();
+    final today = _dayLogs.where(
+      (d) => d.date.year == now.year && d.date.month == now.month && d.date.day == now.day,
+    );
+    if (today.isEmpty) return 0;
+    return today.first.plankSeconds ?? 0;
+  }
+
+  /// Get today's pushup count.
+  int get pushupsCountToday {
+    final now = DateTime.now();
+    final today = _dayLogs.where(
+      (d) => d.date.year == now.year && d.date.month == now.month && d.date.day == now.day,
+    );
+    if (today.isEmpty) return 0;
+    return today.first.pushupsCount ?? 0;
+  }
+
+  /// Get plank seconds for a specific date.
+  int getPlankSecondsForDate(DateTime date) {
+    final log = getDayLogForDate(date);
+    return log?.plankSeconds ?? 0;
+  }
+
+  /// Get pushups count for a specific date.
+  int getPushupsCountForDate(DateTime date) {
+    final log = getDayLogForDate(date);
+    return log?.pushupsCount ?? 0;
+  }
+
+  /// Update plank seconds for a specific date.
+  /// Creates a DayLog if none exists for that date.
+  Future<void> updateDailyPlank(DateTime date, int seconds) async {
+    final dateKey =
+        '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
+    final existing = _dayLogs.where(
+      (d) =>
+          d.date.year == date.year &&
+          d.date.month == date.month &&
+          d.date.day == date.day,
+    );
+
+    if (existing.isNotEmpty) {
+      final old = existing.first;
+      final updated = old.copyWith(plankSeconds: seconds);
+      await _storage.saveDayLog(updated);
+      final idx = _dayLogs.indexOf(old);
+      _dayLogs[idx] = updated;
+    } else {
+      final newLog = DayLog(
+        id: dateKey,
+        date: DateTime(date.year, date.month, date.day),
+        activities: [],
+        plankSeconds: seconds,
+      );
+      await _storage.saveDayLog(newLog);
+      _dayLogs.add(newLog);
+    }
+    notifyListeners();
+    _rescheduleNotifications();
+  }
+
+  /// Update pushup count for a specific date.
+  /// Creates a DayLog if none exists for that date.
+  Future<void> updateDailyPushups(DateTime date, int count) async {
+    final dateKey =
+        '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
+    final existing = _dayLogs.where(
+      (d) =>
+          d.date.year == date.year &&
+          d.date.month == date.month &&
+          d.date.day == date.day,
+    );
+
+    if (existing.isNotEmpty) {
+      final old = existing.first;
+      final updated = old.copyWith(pushupsCount: count);
+      await _storage.saveDayLog(updated);
+      final idx = _dayLogs.indexOf(old);
+      _dayLogs[idx] = updated;
+    } else {
+      final newLog = DayLog(
+        id: dateKey,
+        date: DateTime(date.year, date.month, date.day),
+        activities: [],
+        pushupsCount: count,
+      );
+      await _storage.saveDayLog(newLog);
+      _dayLogs.add(newLog);
+    }
+    notifyListeners();
+    _rescheduleNotifications();
+  }
+
+  /// Remove plank data for a specific date (set to null/0).
+  Future<void> removeDailyPlank(DateTime date) async {
+    final existing = getDayLogForDate(date);
+    if (existing == null) return;
+    final updated = existing.copyWith(plankSeconds: 0);
+    await _storage.saveDayLog(updated);
+    final idx = _dayLogs.indexOf(existing);
+    if (idx >= 0) _dayLogs[idx] = updated;
+    notifyListeners();
+  }
+
+  /// Remove pushup data for a specific date (set to null/0).
+  Future<void> removeDailyPushups(DateTime date) async {
+    final existing = getDayLogForDate(date);
+    if (existing == null) return;
+    final updated = existing.copyWith(pushupsCount: 0);
+    await _storage.saveDayLog(updated);
+    final idx = _dayLogs.indexOf(existing);
+    if (idx >= 0) _dayLogs[idx] = updated;
+    notifyListeners();
+  }
+
+  /// Get plank history for the last N days (for charts).
+  List<({DateTime date, int seconds})> plankHistory(int days) {
+    final now = DateTime.now();
+    final result = <({DateTime date, int seconds})>[];
+    for (int i = days - 1; i >= 0; i--) {
+      final d = DateTime(now.year, now.month, now.day).subtract(Duration(days: i));
+      final log = getDayLogForDate(d);
+      result.add((date: d, seconds: log?.plankSeconds ?? 0));
+    }
+    return result;
+  }
+
+  /// Get pushup history for the last N days (for charts).
+  List<({DateTime date, int count})> pushupHistory(int days) {
+    final now = DateTime.now();
+    final result = <({DateTime date, int count})>[];
+    for (int i = days - 1; i >= 0; i--) {
+      final d = DateTime(now.year, now.month, now.day).subtract(Duration(days: i));
+      final log = getDayLogForDate(d);
+      result.add((date: d, count: log?.pushupsCount ?? 0));
+    }
+    return result;
+  }
 }
