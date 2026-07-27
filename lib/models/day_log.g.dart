@@ -83,6 +83,8 @@ class ActivityTypeAdapter extends TypeAdapter<ActivityType> {
         return ActivityType.tt;
       case 5:
         return ActivityType.badminton;
+      case 6:
+        return ActivityType.hockey;
       default:
         return ActivityType.gym;
     }
@@ -103,6 +105,8 @@ class ActivityTypeAdapter extends TypeAdapter<ActivityType> {
         writer.writeByte(4);
       case ActivityType.badminton:
         writer.writeByte(5);
+      case ActivityType.hockey:
+        writer.writeByte(6);
     }
   }
 

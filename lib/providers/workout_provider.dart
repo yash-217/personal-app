@@ -643,8 +643,20 @@ class WorkoutProvider extends ChangeNotifier {
         .length;
   }
 
+  int get hockeyThisMonth {
+    final now = DateTime.now();
+    return _dayLogs
+        .where(
+          (d) =>
+              d.hasHockey &&
+              d.date.year == now.year &&
+              d.date.month == now.month,
+        )
+        .length;
+  }
+
   int get sportsThisMonth {
-    return footballThisMonth + ttThisMonth + badmintonThisMonth;
+    return footballThisMonth + ttThisMonth + badmintonThisMonth + hockeyThisMonth;
   }
 
   // --- Steps & Walking Distance ---

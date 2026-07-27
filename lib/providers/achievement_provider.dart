@@ -224,6 +224,20 @@ class AchievementProvider extends ChangeNotifier {
       description: 'Log 5 Badminton sessions',
       category: 'volume',
     ),
+    BadgeDefinition(
+      id: 'sport_hockey_first',
+      emoji: '🏒',
+      title: 'Hat Trick',
+      description: 'Log your first Hockey session',
+      category: 'volume',
+    ),
+    BadgeDefinition(
+      id: 'sport_hockey_5',
+      emoji: '🥅',
+      title: 'Slapshot Pro',
+      description: 'Log 5 Hockey sessions',
+      category: 'volume',
+    ),
 
     // Plank
     BadgeDefinition(
@@ -445,6 +459,10 @@ class AchievementProvider extends ChangeNotifier {
 
     final badmintonDays = dayLogs.where((d) => d.hasBadminton).length;
     if (badmintonDays >= 5) await _tryUnlock('sport_badminton_5');
+
+    final hockeyDays = dayLogs.where((d) => d.hasHockey).toList();
+    if (hockeyDays.isNotEmpty) await _tryUnlock('sport_hockey_first');
+    if (hockeyDays.length >= 5) await _tryUnlock('sport_hockey_5');
 
     // --- Plank ---
     final plankDays = dayLogs.where((d) => (d.plankSeconds ?? 0) > 0).toList();

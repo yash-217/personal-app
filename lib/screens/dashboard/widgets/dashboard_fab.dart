@@ -333,6 +333,7 @@ class _DashboardFabState extends State<DashboardFab>
               _buildSportTile(ctx, Icons.sports_soccer, 'Football', AppColors.football, ActivityType.football),
               _buildSportTile(ctx, Icons.sports_tennis, 'Table Tennis', AppColors.tt, ActivityType.tt),
               _buildSportTile(ctx, Icons.sports_tennis, 'Badminton', AppColors.badminton, ActivityType.badminton),
+              _buildSportTile(ctx, Icons.sports_hockey, 'Hockey', AppColors.hockey, ActivityType.hockey),
               const SizedBox(height: 16),
             ],
           ),

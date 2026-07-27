@@ -16,6 +16,8 @@ enum ActivityType {
   tt,
   @HiveField(5)
   badminton,
+  @HiveField(6)
+  hockey,
 }
 
 @HiveType(typeId: 2)
@@ -89,6 +91,7 @@ class DayLog extends HiveObject {
   bool get hasFootball => activities.contains(ActivityType.football);
   bool get hasTT => activities.contains(ActivityType.tt);
   bool get hasBadminton => activities.contains(ActivityType.badminton);
+  bool get hasHockey => activities.contains(ActivityType.hockey);
 
   /// Date key for calendar lookups (yyyy-MM-dd)
   String get dateKey =>

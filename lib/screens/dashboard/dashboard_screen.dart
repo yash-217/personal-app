@@ -171,6 +171,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                         case ActivityType.badminton:
                                           color = AppColors.badminton;
                                           break;
+                                        case ActivityType.hockey:
+                                          color = AppColors.hockey;
+                                          break;
                                       }
                                       return Container(
                                         margin: const EdgeInsets.symmetric(
@@ -297,13 +300,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         label = 'Badminton';
                         color = AppColors.badminton;
                         break;
+                      case ActivityType.hockey:
+                        icon = Icons.sports_hockey;
+                        label = 'Hockey';
+                        color = AppColors.hockey;
+                        break;
                     }
                     // Look up activity log for detail subtitle
                     final activityLog = workout.getActivityLogForDate(day, type);
                     String? subtitle;
                     if (activityLog != null) {
                       subtitle = '${activityLog.formattedDuration} — RPE ${activityLog.perceivedEffort} (${activityLog.effortLabel})';
-                    } else if (type == ActivityType.swim || type == ActivityType.football || type == ActivityType.tt || type == ActivityType.badminton) {
+                    } else if (type == ActivityType.swim || type == ActivityType.football || type == ActivityType.tt || type == ActivityType.badminton || type == ActivityType.hockey) {
                       subtitle = 'No details recorded';
                     }
                     return Slidable(

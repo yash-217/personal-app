@@ -39,6 +39,8 @@ class _AddActivityLogScreenState extends State<AddActivityLogScreen> {
         return 'Table Tennis';
       case ActivityType.badminton:
         return 'Badminton';
+      case ActivityType.hockey:
+        return 'Hockey';
       default:
         return 'Activity';
     }
@@ -54,6 +56,8 @@ class _AddActivityLogScreenState extends State<AddActivityLogScreen> {
         return Icons.sports_tennis;
       case ActivityType.badminton:
         return Icons.sports_tennis;
+      case ActivityType.hockey:
+        return Icons.sports_hockey;
       default:
         return Icons.sports;
     }
@@ -69,6 +73,8 @@ class _AddActivityLogScreenState extends State<AddActivityLogScreen> {
         return AppColors.tt;
       case ActivityType.badminton:
         return AppColors.badminton;
+      case ActivityType.hockey:
+        return AppColors.hockey;
       default:
         return AppColors.swim;
     }
