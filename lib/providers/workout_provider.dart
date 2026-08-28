@@ -878,4 +878,25 @@ class WorkoutProvider extends ChangeNotifier {
     }
     return result;
   }
+
+  /// Get all recorded plank entries with seconds > 0, sorted chronologically from first activity.
+  List<({DateTime date, int seconds})> allPlankEntries() {
+    final entries = _dayLogs
+        .where((d) => (d.plankSeconds ?? 0) > 0)
+        .map((d) => (date: d.date, seconds: d.plankSeconds!))
+        .toList();
+    entries.sort((a, b) => a.date.compareTo(b.date));
+    return entries;
+  }
+
+  /// Get all recorded pushup entries with count > 0, sorted chronologically from first activity.
+  List<({DateTime date, int count})> allPushupEntries() {
+    final entries = _dayLogs
+        .where((d) => (d.pushupsCount ?? 0) > 0)
+        .map((d) => (date: d.date, count: d.pushupsCount!))
+        .toList();
+    entries.sort((a, b) => a.date.compareTo(b.date));
+    return entries;
+  }
 }
+
